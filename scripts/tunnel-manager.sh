@@ -19,10 +19,11 @@ case "$1" in
     sleep 15
     
     # Show tunnel info
+    echo "📡 Playit tunnel logs:"
     docker logs playit
     
     echo "✅ Playit tunnel started!"
-    echo "🌐 Check https://playit.gg/account/tunnels for your address"
+    echo "🌐 Check https://playit.gg/account/tunnels for your connection address"
     ;;
     
   stop)
