@@ -1,0 +1,96 @@
+name: Minecraft Paper Server Loop
+
+on:
+  workflow_dispatch:
+
+jobs:
+  minecraft-server:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openjdk-21-jdk-headless python3-pip screen jq docker.io
+          sudo systemctl start docker
+          pip3 install huggingface_hub requests
+
+      - name: Cancel Previous Runs
+        run: bash scripts/cancel-previous.sh
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+
+      - name: Telegram - Server Starting
+        run: bash scripts/telegram-notify.sh "starting"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_NUMBER: ${{ github.run_number }}
+
+      - name: Download Backup from HuggingFace
+        run: python3 scripts/backup-manager.py download
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_DATASET_REPO: ${{ secrets.HF_DATASET_REPO }}
+
+      - name: Setup Minecraft Server
+        run: bash scripts/setup-server.sh
+
+      - name: Start Playit Tunnel
+        run: bash scripts/tunnel-manager.sh start
+        env:
+          PLAYIT_SECRET_KEY: ${{ secrets.PLAYIT_SECRET_KEY }}
+
+      - name: Start Minecraft Server
+        run: bash scripts/start-server.sh
+
+      - name: Telegram - Server Online
+        run: bash scripts/telegram-notify.sh "online"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_NUMBER: ${{ github.run_number }}
+
+      - name: Monitor Server (5h 30m)
+        run: bash scripts/monitor-server.sh
+        env:
+          PLAYIT_SECRET_KEY: ${{ secrets.PLAYIT_SECRET_KEY }}
+
+      - name: Shutdown Server Gracefully
+        run: bash scripts/shutdown-server.sh
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Create & Upload Backup
+        run: python3 scripts/backup-manager.py upload
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_DATASET_REPO: ${{ secrets.HF_DATASET_REPO }}
+          RUN_NUMBER: ${{ github.run_number }}
+
+      - name: Telegram - Backup Complete
+        run: bash scripts/telegram-notify.sh "backup-done"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Trigger Next Workflow
+        run: bash scripts/trigger-next.sh
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+
+      - name: Telegram - New Server Starting
+        run: bash scripts/telegram-notify.sh "restarting"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Cleanup
+        run: sleep 30
