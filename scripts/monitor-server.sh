@@ -25,7 +25,30 @@ for ((i=0; i<RUNTIME; i+=INTERVAL)); do
   else
     echo "❌ Minecraft crashed! Restarting..."
     cd minecraft-server
-    screen -dmS minecraft java -Xmx3500M -Xms2G -jar paper.jar --nogui
+    
+    # Use Java 21 explicitly for restart
+    echo "🔄 Restarting with Java 21..."
+    /usr/lib/jvm/java-21-openjdk-amd64/bin/java -Xmx3500M -Xms2G \
+      -XX:+UseG1GC \
+      -XX:+ParallelRefProcEnabled \
+      -XX:MaxGCPauseMillis=200 \
+      -XX:+UnlockExperimentalVMOptions \
+      -XX:+DisableExplicitGC \
+      -XX:+AlwaysPreTouch \
+      -XX:G1NewSizePercent=30 \
+      -XX:G1MaxNewSizePercent=40 \
+      -XX:G1HeapRegionSize=8M \
+      -XX:G1ReservePercent=20 \
+      -XX:G1HeapWastePercent=5 \
+      -XX:G1MixedGCCountTarget=4 \
+      -XX:InitiatingHeapOccupancyPercent=15 \
+      -XX:G1MixedGCLiveThresholdPercent=90 \
+      -XX:G1RSetUpdatingPauseTimePercent=5 \
+      -XX:SurvivorRatio=32 \
+      -XX:+PerfDisableSharedMem \
+      -XX:MaxTenuringThreshold=1 \
+      -jar paper.jar --nogui &
+    
     cd ..
     sleep 40
   fi
