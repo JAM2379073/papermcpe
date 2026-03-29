@@ -10,3 +10,4 @@ curl -X POST \
   -d '{"ref":"main"}'
 
 echo "✅ Next workflow triggered!"
+sleep 5
