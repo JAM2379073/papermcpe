@@ -13,10 +13,33 @@ jobs:
 
       - name: Install Dependencies
         run: |
+          echo "📦 Installing dependencies..."
           sudo apt-get update
-          sudo apt-get install -y openjdk-21-jdk-headless python3-pip screen jq docker.io
-          sudo systemctl start docker
+          
+          # Install Java 21
+          echo "☕ Installing Java 21..."
+          sudo apt-get install -y openjdk-21-jdk-headless
+          
+          # Set Java 21 as default
+          echo "🔧 Setting Java 21 as default..."
+          sudo update-alternatives --set java /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+          sudo update-alternatives --set javac /usr/lib/jvm/java-21-openjdk-amd64/bin/javac
+          
+          # Install other tools (Docker already on runner)
+          echo "🔧 Installing tools..."
+          sudo apt-get install -y python3-pip screen jq
+          
+          # Install Python packages
+          echo "🐍 Installing Python packages..."
           pip3 install huggingface_hub requests
+          
+          # Verify installations
+          echo "✅ Verifying installations..."
+          java -version
+          python3 --version
+          docker --version
+          
+          echo "✅ All dependencies installed!"
 
       - name: Cancel Previous Runs
         run: bash scripts/cancel-previous.sh
