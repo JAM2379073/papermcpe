@@ -5,73 +5,53 @@ echo "🎮 Starting Minecraft server..."
 
 cd minecraft-server
 
-# Verify Java 21 is being used
-echo "☕ Java version check:"
+# Verify Java version
+echo "☕ Using Java:"
 java -version 2>&1 | head -n 1
 
-# Check if Java 21 is actually being used
-JAVA_VERSION=$(java -version 2>&1 | head -n 1 | grep -oP '\d+' | head -n 1)
-if [ "$JAVA_VERSION" != "21" ]; then
-  echo "❌ ERROR: Java $JAVA_VERSION detected, but Java 21 is required!"
-  echo "Available Java versions:"
-  update-alternatives --display java
+# Check paper.jar exists
+if [ ! -f paper.jar ]; then
+  echo "❌ paper.jar not found!"
   exit 1
 fi
 
-echo "✅ Java 21 confirmed"
+echo "✅ Found paper.jar ($(du -h paper.jar | cut -f1))"
 
-# Start server in screen with optimized JVM flags
-echo "🚀 Launching Paper server..."
-screen -dmS minecraft java -Xmx6G -Xms12G \
-  -XX:+UseG1GC \
-  -XX:+ParallelRefProcEnabled \
-  -XX:MaxGCPauseMillis=200 \
-  -XX:+UnlockExperimentalVMOptions \
-  -XX:+DisableExplicitGC \
-  -XX:+AlwaysPreTouch \
-  -XX:G1NewSizePercent=30 \
-  -XX:G1MaxNewSizePercent=40 \
-  -XX:G1HeapRegionSize=8M \
-  -XX:G1ReservePercent=20 \
-  -XX:G1HeapWastePercent=5 \
-  -XX:G1MixedGCCountTarget=4 \
-  -XX:InitiatingHeapOccupancyPercent=15 \
-  -XX:G1MixedGCLiveThresholdPercent=90 \
-  -XX:G1RSetUpdatingPauseTimePercent=5 \
-  -XX:SurvivorRatio=32 \
-  -XX:+PerfDisableSharedMem \
-  -XX:MaxTenuringThreshold=1 \
-  -jar paper.jar --nogui
+# Create logs directory
+mkdir -p logs
+
+# Start server with simple flags (6GB min, 12GB max)
+echo "🚀 Starting server with 6GB-12GB RAM..."
+
+screen -dmS minecraft java -Xms6G -Xmx12G -jar paper.jar --nogui
 
 echo "⏳ Waiting for server to start..."
-sleep 50
+sleep 60
 
-# Verify server is running
+# Check if server is running
 if screen -list | grep -q "minecraft"; then
-  echo "✅ Server process started successfully!"
+  echo "✅ Server is running!"
   
-  # Wait for server to be fully loaded
-  echo "⏳ Waiting for world to load..."
+  # Wait for "Done" in logs
   for i in {1..60}; do
-    if [ -f logs/latest.log ]; then
-      if grep -q "Done" logs/latest.log; then
-        echo "✅ Server fully loaded!"
-        break
-      fi
+    if [ -f logs/latest.log ] && grep -q "Done" logs/latest.log; then
+      echo "✅ Server fully loaded!"
+      tail -5 logs/latest.log
+      cd ..
+      exit 0
     fi
-    
-    if [ $i -eq 60 ]; then
-      echo "⚠️ Server took longer than expected to load"
-      echo "📋 Last 10 lines of log:"
-      tail -10 logs/latest.log 2>/dev/null || echo "No logs yet"
-    fi
-    
     sleep 2
   done
+  
+  echo "⚠️ Server running but not fully loaded yet"
+  if [ -f logs/latest.log ]; then
+    tail -10 logs/latest.log
+  fi
 else
   echo "❌ Server failed to start!"
-  echo "📋 Checking logs..."
-  cat logs/latest.log 2>/dev/null || echo "No logs found"
+  if [ -f logs/latest.log ]; then
+    cat logs/latest.log
+  fi
   exit 1
 fi
 
