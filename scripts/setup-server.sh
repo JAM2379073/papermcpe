@@ -73,6 +73,7 @@ simulation-distance=8
 max-world-size=29999984
 white-list=false
 allow-flight=true
+enable-status=true
 EOF
 fi
 
