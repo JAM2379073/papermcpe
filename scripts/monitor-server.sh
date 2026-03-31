@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "👀 Monitoring server for 5h 30m..."
+echo "👀 Monitoring server + panel for 5h 30m..."
 
 RUNTIME=$((5 * 60 * 60 + 30 * 60))
 INTERVAL=180
@@ -32,9 +32,28 @@ for ((i=0; i<RUNTIME; i+=INTERVAL)); do
     echo "✅ Playit: Running"
   else
     echo "⚠️ Playit stopped! Restarting..."
+    docker rm playit 2>/dev/null || true
     docker run -d --name playit --net=host \
       -e SECRET_KEY=${PLAYIT_SECRET_KEY} \
       ghcr.io/playit-cloud/playit-agent:0.17
+  fi
+  
+  # Check Panel
+  if curl -s http://localhost:8080 > /dev/null 2>&1; then
+    echo "✅ Panel: Running"
+  else
+    echo "⚠️ Panel stopped! Restarting..."
+    cd scripts/panel
+    python3 panel-server.py &
+    cd ../..
+  fi
+  
+  # Check Cloudflared
+  if systemctl is-active --quiet cloudflared; then
+    echo "✅ Cloudflared: Running"
+  else
+    echo "⚠️ Cloudflared stopped! Restarting..."
+    sudo systemctl start cloudflared
   fi
   
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
