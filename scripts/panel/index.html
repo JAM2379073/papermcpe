@@ -3,11 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>MCPanel</title>
+<title>MCPanel v2</title>
+<link rel="manifest" href="/manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -33,12 +35,12 @@ input:focus,textarea:focus,select:focus,button:focus{outline:none}
 /* ── login overlay ── */
 .login-overlay{position:fixed;inset:0;z-index:9999;background:var(--bg0);display:flex;align-items:center;justify-content:center;padding:20px}
 .login-overlay.off{display:none}
-.login-box{background:var(--bg2);border:1px solid var(--bdH);border-radius:var(--rxl);padding:36px;width:100%;max-width:360px;box-shadow:0 16px 48px rgba(0,0,0,.5);text-align:center}
+.login-box{background:var(--bg2);border:1px solid var(--bdH);border-radius:var(--rxl);padding:36px;width:100%;max-width:380px;box-shadow:0 16px 48px rgba(0,0,0,.5);text-align:center}
 .login-box .logo{width:48px;height:48px;background:var(--acM);border-radius:var(--rl);display:grid;place-items:center;margin:0 auto 16px}
 .login-box .logo i{width:24px;height:24px;color:var(--ac)}
 .login-box h2{font-size:18px;font-weight:800;letter-spacing:-.5px;margin-bottom:4px}
 .login-box .sub{font-size:12px;color:var(--tx3);margin-bottom:24px}
-.login-box .li{width:100%;padding:11px 14px;background:var(--bg4);border:1px solid var(--bdH);border-radius:var(--r);color:var(--tx);font-family:var(--mono);font-size:13px;outline:none;margin-bottom:12px;text-align:center;letter-spacing:2px}
+.login-box .li{width:100%;padding:11px 14px;background:var(--bg4);border:1px solid var(--bdH);border-radius:var(--r);color:var(--tx);font-size:13px;outline:none;margin-bottom:12px;text-align:center}
 .login-box .li:focus{border-color:var(--ac)}
 .login-box .lb{width:100%;padding:11px;font-size:13px;font-weight:600;border-radius:var(--r);cursor:pointer;border:none;background:var(--ac);color:#fff;font-family:inherit;transition:all .12s}
 .login-box .lb:hover{background:var(--acH)}
@@ -49,19 +51,27 @@ input:focus,textarea:focus,select:focus,button:focus{outline:none}
 .shell{display:flex;min-height:100dvh}
 
 /* ── sidebar ── */
-.sb{width:220px;flex-shrink:0;background:var(--bg1);border-right:1px solid var(--bd);display:flex;flex-direction:column;position:fixed;inset:0 auto 0 0;z-index:100;transition:transform .25s cubic-bezier(.4,0,.2,1)}
+.sb{width:240px;flex-shrink:0;background:var(--bg1);border-right:1px solid var(--bd);display:flex;flex-direction:column;position:fixed;inset:0 auto 0 0;z-index:100;transition:transform .25s cubic-bezier(.4,0,.2,1)}
 .sb-logo{padding:18px 16px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px}
 .sb-logo-ic{width:32px;height:32px;background:var(--acM);border-radius:var(--r);display:grid;place-items:center;flex-shrink:0}
 .sb-logo-ic i{width:17px;height:17px;color:var(--ac)}
 .sb-logo-tx{font-size:14px;font-weight:700;letter-spacing:-.4px}
 .sb-logo-sub{font-size:10px;color:var(--tx3);margin-top:1px}
 .sb-nav{flex:1;padding:10px 6px;overflow-y:auto;display:flex;flex-direction:column;gap:1px}
-.sb-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--tx4);padding:14px 10px 5px}
+.sb-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--tx4);padding:14px 10px 5px;user-select:none}
 .sb-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:6px;font-size:12.5px;font-weight:500;color:var(--tx2);cursor:pointer;transition:all .12s;border:none;background:none;width:100%;text-align:left;font-family:inherit}
 .sb-item:hover{background:var(--bgH);color:var(--tx)}
 .sb-item.on{background:var(--acM);color:var(--acH)}
 .sb-item i{width:16px;height:16px;flex-shrink:0;opacity:.65}
 .sb-item.on i{opacity:1;color:var(--ac)}
+.sb-srv-item{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:500;color:var(--tx2);cursor:pointer;transition:all .12s;border:none;background:none;width:100%;text-align:left;font-family:inherit}
+.sb-srv-item:hover{background:var(--bgH);color:var(--tx)}
+.sb-srv-item.active{background:var(--acM);color:var(--acH)}
+.sb-srv-item i.srv-icon{width:14px;height:14px;flex-shrink:0;opacity:.6}
+.sb-srv-item.active i.srv-icon{opacity:1;color:var(--ac)}
+.sb-create-srv{display:flex;align-items:center;gap:7px;padding:6px 10px;border-radius:6px;font-size:11px;font-weight:500;color:var(--tx3);cursor:pointer;transition:all .12s;border:1px dashed var(--bd);background:none;width:100%;text-align:left;font-family:inherit;margin-top:2px}
+.sb-create-srv:hover{border-color:var(--ac);color:var(--ac);background:var(--acM)}
+.sb-create-srv i{width:13px;height:13px}
 .sb-foot{padding:12px;border-top:1px solid var(--bd)}
 .sb-pill{display:flex;align-items:center;gap:7px;padding:9px 10px;border-radius:6px;background:var(--bg4);border:1px solid var(--bd)}
 .sb-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
@@ -70,12 +80,21 @@ input:focus,textarea:focus,select:focus,button:focus{outline:none}
 .sb-stx{font-size:11px;font-weight:600}
 .sb-stx.on{color:var(--gn)}.sb-stx.off{color:var(--rd)}
 .sb-extra{font-size:10px;color:var(--tx3);margin-top:4px}
-.sb-logout{display:flex;align-items:center;gap:7px;padding:8px 10px;border-radius:6px;font-size:11px;font-weight:500;color:var(--rd);cursor:pointer;transition:all .12s;border:none;background:none;width:100%;text-align:left;font-family:inherit;margin-top:8px}
+.sb-user{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;background:var(--bg4);border:1px solid var(--bd);margin-bottom:8px}
+.sb-user-avatar{width:28px;height:28px;border-radius:6px;background:var(--acM);display:grid;place-items:center;flex-shrink:0}
+.sb-user-avatar i{width:14px;height:14px;color:var(--ac)}
+.sb-user-name{font-size:11px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-user-role{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 6px;border-radius:4px}
+.role-owner{background:var(--prM);color:var(--pr)}
+.role-admin{background:var(--acM);color:var(--ac)}
+.role-mod{background:var(--amM);color:var(--am)}
+.role-viewer{background:rgba(156,163,175,.12);color:var(--tx3)}
+.sb-logout{display:flex;align-items:center;gap:7px;padding:8px 10px;border-radius:6px;font-size:11px;font-weight:500;color:var(--rd);cursor:pointer;transition:all .12s;border:none;background:none;width:100%;text-align:left;font-family:inherit;margin-top:4px}
 .sb-logout:hover{background:var(--rdM)}
 .sb-logout i{width:14px;height:14px}
 
 /* ── main ── */
-.mn{flex:1;margin-left:220px;display:flex;flex-direction:column;min-height:100dvh}
+.mn{flex:1;margin-left:240px;display:flex;flex-direction:column;min-height:100dvh}
 
 /* ── header ── */
 .hd{height:52px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:var(--bg1);position:sticky;top:0;z-index:50;flex-shrink:0}
@@ -84,6 +103,7 @@ input:focus,textarea:focus,select:focus,button:focus{outline:none}
 .burger:hover{background:var(--bgH)}
 .burger i{width:18px;height:18px}
 .hd-title{font-size:13px;font-weight:600}
+.hd-srv-sel{display:none;padding:6px 10px;background:var(--bg4);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:12px;font-family:inherit;cursor:pointer;max-width:160px}
 .hd-right{display:flex;gap:6px;align-items:center}
 
 /* ── button ── */
@@ -99,16 +119,20 @@ input:focus,textarea:focus,select:focus,button:focus{outline:none}
 .btn-rd:hover{background:#dc2626}
 .btn-am{background:var(--am);border-color:var(--am);color:#000}
 .btn-am:hover{background:#d97706}
+.btn-pr{background:var(--pr);border-color:var(--pr);color:#fff}
+.btn-pr:hover{background:#9333ea}
 .btn-gh{background:transparent;border-color:transparent}
 .btn-gh:hover{background:var(--bgH);border-color:var(--bd)}
 .btn-xs{padding:4px 8px;font-size:11px}
 .btn-xs i{width:12px;height:12px}
 .btn-ic{padding:6px;border-color:transparent;background:transparent}
 .btn-ic:hover{background:var(--bgH)}
+.btn[disabled]{opacity:.4;cursor:not-allowed;pointer-events:none}
 
-/* ── page ── */
+/* ── page transition ── */
 .pg{flex:1;padding:20px;overflow-y:auto}
-.vw{display:none}.vw.on{display:block}
+.vw{display:none;opacity:0;transform:translateY(6px);transition:opacity .2s ease,transform .2s ease}
+.vw.on{display:block;opacity:1;transform:translateY(0)}
 
 /* ── grid ── */
 .g{display:grid;gap:10px;margin-bottom:16px}
@@ -135,6 +159,10 @@ input:focus,textarea:focus,select:focus,button:focus{outline:none}
 .bar{height:3px;background:var(--bg5);border-radius:2px;margin-top:10px;overflow:hidden}
 .bar-f{height:100%;border-radius:2px;transition:width .5s ease}
 
+/* ── chart container ── */
+.chart-wrap{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--rl);padding:14px;margin-bottom:10px}
+.chart-wrap canvas{width:100%!important;height:80px!important}
+
 /* ── controls ── */
 .ctrls{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
 
@@ -153,6 +181,9 @@ input:focus,textarea:focus,select:focus,button:focus{outline:none}
 .tm-dr{background:#ff5f57}.tm-dy{background:#febc2e}.tm-dg{background:#28c840}
 .tm-lbl{font-size:11px;font-weight:600;color:var(--tx3);margin-left:10px}
 .tm-body{flex:1;overflow-y:auto;padding:14px;font-family:var(--mono);font-size:11.5px;line-height:1.75;white-space:pre-wrap;word-break:break-all;color:var(--tx2)}
+.tm-body .log-error{color:var(--rd)}
+.tm-body .log-warn{color:var(--am)}
+.tm-body .log-info{color:var(--tx2)}
 .tm-ibar{display:flex;align-items:center;border-top:1px solid var(--bd);background:var(--bg1);flex-shrink:0}
 .tm-prompt{padding:0 10px 0 14px;font-family:var(--mono);font-size:12px;color:var(--gn);user-select:none}
 .tm-in{flex:1;padding:11px 14px 11px 0;background:transparent;border:none;outline:none;color:var(--tx);font-family:var(--mono);font-size:12px}
@@ -170,6 +201,7 @@ input:focus,textarea:focus,select:focus,button:focus{outline:none}
 .ft tbody tr{border-bottom:1px solid var(--bd);cursor:pointer;transition:background .1s}
 .ft tbody tr:last-child{border-bottom:none}
 .ft tbody tr:hover{background:var(--bgH)}
+.ft tbody tr.dir-row{cursor:pointer}
 .ft td{padding:8px 14px;font-size:12px;vertical-align:middle}
 .fn{display:flex;align-items:center;gap:9px}
 .fi{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;flex-shrink:0}
@@ -206,8 +238,9 @@ input:focus,textarea:focus,select:focus,button:focus{outline:none}
 .pg2{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
 .pc{background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r);padding:14px;display:flex;align-items:center;gap:12px;transition:border-color .15s}
 .pc:hover{border-color:var(--bdH)}
-.pa{width:38px;height:38px;border-radius:var(--r);background:var(--acM);display:grid;place-items:center;flex-shrink:0}
-.pa i{width:18px;height:18px;color:var(--ac)}
+.pc-avatar{width:38px;height:38px;border-radius:var(--r);overflow:hidden;flex-shrink:0;background:var(--acM);display:grid;place-items:center}
+.pc-avatar img{width:100%;height:100%;object-fit:cover;border-radius:var(--r)}
+.pc-avatar i{width:18px;height:18px;color:var(--ac)}
 .pn{font-size:13px;font-weight:600}
 .po{font-size:11px;color:var(--gn);display:flex;align-items:center;gap:4px;margin-top:2px}
 .po-d{width:5px;height:5px;border-radius:50%;background:var(--gn)}
@@ -255,22 +288,79 @@ input:focus,textarea:focus,select:focus,button:focus{outline:none}
 /* ── modal ── */
 .mo-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:200;align-items:center;justify-content:center;padding:20px}
 .mo-bg.on{display:flex}
-.mo-box{background:var(--bg2);border:1px solid var(--bdH);border-radius:var(--rxl);padding:22px;width:100%;max-width:380px;box-shadow:0 16px 48px rgba(0,0,0,.5)}
+.mo-box{background:var(--bg2);border:1px solid var(--bdH);border-radius:var(--rxl);padding:22px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,.5);animation:moIn .2s ease}
+@keyframes moIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
 .mo-box h3{font-size:14px;font-weight:700;margin-bottom:4px}
 .mo-box p{font-size:12px;color:var(--tx3);margin-bottom:14px}
-.mo-f{width:100%;padding:9px 12px;background:var(--bg4);border:1px solid var(--bdH);border-radius:6px;color:var(--tx);font-family:var(--mono);font-size:12px;outline:none;margin-bottom:12px}
+.mo-f{width:100%;padding:9px 12px;background:var(--bg4);border:1px solid var(--bdH);border-radius:6px;color:var(--tx);font-size:12px;outline:none;margin-bottom:12px}
 .mo-f:focus{border-color:var(--ac)}
 .mo-sel{width:100%;padding:9px 12px;background:var(--bg4);border:1px solid var(--bdH);border-radius:6px;color:var(--tx);font-size:12px;outline:none;margin-bottom:12px;cursor:pointer}
 .mo-act{display:flex;gap:6px;justify-content:flex-end}
 .shade{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:90}
 .shade.on{display:block}
 
+/* ── spinner ── */
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--bd);border-top-color:var(--ac);border-radius:50%;animation:sp .6s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.spin-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(9,9,11,.6);border-radius:var(--rl);z-index:5}
+.spin-lg{width:28px;height:28px;border-width:3px}
+
+/* ── user management ── */
+.role-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.user-table{width:100%;border-collapse:collapse}
+.user-table thead th{padding:9px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--tx4);text-align:left;background:var(--bg3);border-bottom:1px solid var(--bd)}
+.user-table tbody tr{border-bottom:1px solid var(--bd);transition:background .1s}
+.user-table tbody tr:last-child{border-bottom:none}
+.user-table tbody tr:hover{background:var(--bgH)}
+.user-table td{padding:10px 14px;font-size:12px;vertical-align:middle}
+
+/* ── marketplace ── */
+.mk-search{display:flex;gap:8px;margin-bottom:16px}
+.mk-search input{flex:1;padding:10px 14px;background:var(--bg4);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:13px;outline:none}
+.mk-search input:focus{border-color:var(--ac)}
+.mk-search input::placeholder{color:var(--tx4)}
+.mk-featured{margin-bottom:20px}
+.mk-featured-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--tx3);margin-bottom:10px}
+.mk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.mk-card{background:var(--bg3);border:1px solid var(--bd);border-radius:var(--rl);padding:16px;display:flex;flex-direction:column;gap:10px;transition:border-color .15s}
+.mk-card:hover{border-color:var(--bdH)}
+.mk-card-top{display:flex;align-items:center;gap:12px}
+.mk-card-icon{width:44px;height:44px;border-radius:var(--r);overflow:hidden;background:var(--bg5);flex-shrink:0;display:grid;place-items:center}
+.mk-card-icon img{width:100%;height:100%;object-fit:cover}
+.mk-card-icon i{width:20px;height:20px;color:var(--tx3)}
+.mk-card-title{font-size:13px;font-weight:600;color:var(--tx);line-height:1.3}
+.mk-card-author{font-size:11px;color:var(--tx3)}
+.mk-card-desc{font-size:11px;color:var(--tx2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mk-card-stats{display:flex;gap:12px;font-size:10px;color:var(--tx3)}
+.mk-card-stats span{display:flex;align-items:center;gap:3px}
+.mk-card-stats i{width:11px;height:11px}
+.mk-card-actions{margin-top:auto;display:flex;gap:6px}
+
+/* ── backup manager ── */
+.bk-list{display:flex;flex-direction:column;gap:6px}
+.bk-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg4);border:1px solid var(--bd);border-radius:6px;transition:border-color .15s}
+.bk-item:hover{border-color:var(--bdH)}
+.bk-name{font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px}
+.bk-name i{width:14px;height:14px;color:var(--tx3)}
+.bk-meta{font-size:10px;color:var(--tx3);font-family:var(--mono)}
+.bk-actions{display:flex;gap:4px}
+
+/* ── audit log ── */
+.audit-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--bd)}
+.audit-item:last-child{border-bottom:none}
+.audit-icon{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;flex-shrink:0}
+.audit-icon i{width:13px;height:13px}
+.audit-text{flex:1;font-size:12px;color:var(--tx2);line-height:1.5}
+.audit-text strong{color:var(--tx);font-weight:600}
+.audit-time{font-size:10px;color:var(--tx4);font-family:var(--mono);white-space:nowrap}
+
 /* ── responsive ── */
-@media(max-width:1100px){.g6{grid-template-columns:repeat(3,1fr)}.info-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:1100px){.g6{grid-template-columns:repeat(3,1fr)}.info-grid{grid-template-columns:repeat(2,1fr)}.mk-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:900px){
 .sb{transform:translateX(-100%)}.sb.open{transform:translateX(0)}
 .mn{margin-left:0}.burger{display:flex}
 .g6{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(2,1fr)}
+.hd-srv-sel{display:block}
 }
 @media(max-width:640px){
 html{font-size:13px}
@@ -286,6 +376,10 @@ html{font-size:13px}
 .toasts{bottom:12px;right:12px;left:12px}.tst{min-width:auto;max-width:none}
 .g2-mob{grid-template-columns:1fr!important}
 .info-grid{grid-template-columns:1fr}
+.mk-grid{grid-template-columns:1fr}
+.chart-wrap canvas{height:60px!important}
+.pc-avatar img{width:32px;height:32px}
+.hide-xs{display:none!important}
 }
 @media(max-width:380px){.g6,.g4{grid-template-columns:1fr 1fr}.st-lbl{font-size:9px}}
 </style>
@@ -296,10 +390,11 @@ html{font-size:13px}
 <div class="login-overlay" id="loginOv">
 <div class="login-box">
 <div class="logo"><i data-lucide="server"></i></div>
-<h2>MCPanel</h2>
-<p class="sub">Enter password to access the server panel</p>
-<input class="li" id="loginPw" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
-<button class="lb" id="loginBtn" onclick="doLogin()">Unlock</button>
+<h2>MCPanel v2</h2>
+<p class="sub">Enter credentials to access the server panel</p>
+<input class="li" id="loginUser" type="text" placeholder="Username" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('loginPw').focus()">
+<input class="li" id="loginPw" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+<button class="lb" id="loginBtn" onclick="doLogin()">Login</button>
 <div class="err" id="loginErr"></div>
 </div>
 </div>
@@ -312,29 +407,13 @@ html{font-size:13px}
 <aside class="sb" id="sb">
 <div class="sb-logo">
 <div class="sb-logo-ic"><i data-lucide="server"></i></div>
-<div><div class="sb-logo-tx">MCPanel</div><div class="sb-logo-sub">Server Manager</div></div>
+<div><div class="sb-logo-tx">MCPanel</div><div class="sb-logo-sub">Server Manager v2</div></div>
 </div>
-<nav class="sb-nav">
-<div class="sb-lbl">General</div>
-<button class="sb-item on" onclick="go('dash',this)"><i data-lucide="layout-dashboard"></i>Dashboard</button>
-<button class="sb-item" onclick="go('con',this)"><i data-lucide="terminal"></i>Console</button>
-<div class="sb-lbl">Manage</div>
-<button class="sb-item" onclick="go('files',this)"><i data-lucide="folder-open"></i>Files</button>
-<button class="sb-item" onclick="go('props',this)"><i data-lucide="sliders-horizontal"></i>Configuration</button>
-<button class="sb-item" onclick="go('ppl',this)"><i data-lucide="users-round"></i>Players</button>
-<button class="sb-item" onclick="go('plugins',this)"><i data-lucide="puzzle"></i>Plugins</button>
-<div class="sb-lbl">Tools</div>
-<button class="sb-item" onclick="go('sched',this)"><i data-lucide="calendar-clock"></i>Schedules</button>
-<button class="sb-item" onclick="go('logs',this)"><i data-lucide="scroll-text"></i>Logs</button>
-<button class="sb-item" onclick="go('info',this)"><i data-lucide="info"></i>Server Info</button>
+<nav class="sb-nav" id="sbNav">
+<!-- Populated by JS -->
 </nav>
-<div class="sb-foot">
-<div class="sb-pill">
-<div class="sb-dot off" id="sDot"></div>
-<span class="sb-stx off" id="sTx">Offline</span>
-</div>
-<div class="sb-extra" id="sUp">Uptime: --</div>
-<button class="sb-logout" onclick="doLogout()"><i data-lucide="log-out"></i>Logout</button>
+<div class="sb-foot" id="sbFoot">
+<!-- Populated by JS -->
 </div>
 </aside>
 
@@ -343,9 +422,10 @@ html{font-size:13px}
 <header class="hd">
 <div class="hd-left">
 <button class="burger" onclick="openSb()"><i data-lucide="menu"></i></button>
+<select class="hd-srv-sel" id="hdSrvSel" onchange="selectServer(parseInt(this.value))"></select>
 <span class="hd-title" id="hT">Dashboard</span>
 </div>
-<div class="hd-right">
+<div class="hd-right" id="hdActions">
 <button class="btn btn-xs btn-gn" onclick="act('start')"><i data-lucide="play"></i><span>Start</span></button>
 <button class="btn btn-xs btn-rd" onclick="act('stop')"><i data-lucide="square"></i><span>Stop</span></button>
 <button class="btn btn-xs btn-am" onclick="act('restart')"><i data-lucide="rotate-cw"></i><span>Restart</span></button>
@@ -364,8 +444,15 @@ html{font-size:13px}
 <div class="st"><div class="st-top"><span class="st-lbl">Uptime</span><div class="st-ic am"><i data-lucide="clock"></i></div></div><div class="st-val" id="dU" style="font-size:15px">--</div></div>
 <div class="st"><div class="st-top"><span class="st-lbl">TPS</span><div class="st-ic gn" id="dTI"><i data-lucide="activity"></i></div></div><div class="st-val" id="dTPS">20.0</div><div class="st-hint" id="dTH">ticks/sec</div></div>
 </div>
+<!-- Charts row -->
+<div class="g g3 g2-mob" style="margin-bottom:16px">
+<div class="chart-wrap"><canvas id="chartCpu"></canvas></div>
+<div class="chart-wrap"><canvas id="chartRam"></canvas></div>
+<div class="chart-wrap"><canvas id="chartTps"></canvas></div>
+</div>
 <div class="ctrls">
 <button class="btn" onclick="act('backup')"><i data-lucide="archive"></i>Backup</button>
+<button class="btn" onclick="backupToHF()"><i data-lucide="cloud-upload"></i>Backup to HuggingFace</button>
 <button class="btn" onclick="openSayModal()"><i data-lucide="megaphone"></i>Broadcast</button>
 </div>
 <div class="g g4">
@@ -375,14 +462,26 @@ html{font-size:13px}
 <div class="st"><div class="st-top"><span class="st-lbl">Chat</span><div class="st-ic cy"><i data-lucide="message-circle"></i></div></div><div class="st-val" id="xC">0</div></div>
 </div>
 <div class="st" style="margin-top:16px"><div class="st-top"><span class="st-lbl">Java</span><div class="st-ic rd"><i data-lucide="coffee"></i></div></div><div class="st-val" id="dJ" style="font-size:11px;font-family:var(--mono)">-</div></div>
+<!-- Backup manager on dashboard -->
+<div class="cd" style="margin-top:16px">
+<div class="cd-h"><div class="cd-hl"><i data-lucide="archive"></i>Backups</div><div style="display:flex;gap:6px"><button class="btn btn-xs" onclick="lBackups()"><i data-lucide="refresh-cw"></i>Refresh</button></div></div>
+<div class="cd-body"><div class="bk-list" id="bkList"><div class="empty"><i data-lucide="archive"></i><p>Loading backups...</p></div></div></div>
+</div>
 </div>
 
 <!-- CONSOLE -->
 <div class="vw" id="v-con">
 <div class="tm">
-<div class="tm-bar"><div style="display:flex;align-items:center;gap:8px"><div class="tm-dots"><span class="tm-d tm-dr"></span><span class="tm-d tm-dy"></span><span class="tm-d tm-dg"></span></div><span class="tm-lbl">server console</span></div><button class="btn btn-xs" onclick="fCon()"><i data-lucide="refresh-cw"></i>Refresh</button></div>
+<div class="tm-bar">
+<div style="display:flex;align-items:center;gap:8px"><div class="tm-dots"><span class="tm-d tm-dr"></span><span class="tm-d tm-dy"></span><span class="tm-d tm-dg"></span></div><span class="tm-lbl">server console</span></div>
+<div style="display:flex;gap:6px;align-items:center">
+<button class="btn btn-xs btn-gh" id="conAutoScroll" onclick="toggleConAutoScroll()" title="Auto-scroll"><i data-lucide="arrow-down"></i></button>
+<button class="btn btn-xs" onclick="clearConsole()"><i data-lucide="trash-2"></i></button>
+<button class="btn btn-xs" onclick="fCon()"><i data-lucide="refresh-cw"></i>Refresh</button>
+</div>
+</div>
 <div class="tm-body" id="tB">Waiting for output...</div>
-<div class="tm-ibar"><span class="tm-prompt">&gt;</span><input class="tm-in" id="tI" placeholder="Enter command..." onkeydown="if(event.key==='Enter')sCmd()"></div>
+<div class="tm-ibar"><span class="tm-prompt">&gt;</span><input class="tm-in" id="tI" placeholder="Enter command..." onkeydown="handleConKey(event)"></div>
 </div>
 </div>
 
@@ -396,7 +495,7 @@ html{font-size:13px}
 <button class="btn btn-xs" onclick="openMo('New Folder','','mkdir')"><i data-lucide="folder-plus"></i><span class="fmh">Folder</span></button>
 <button class="btn btn-xs btn-ic" onclick="lDir(cDir)"><i data-lucide="refresh-cw"></i></button>
 </div>
-<div class="cd"><div style="overflow-x:auto"><table class="ft"><thead><tr><th>Name</th><th class="fmh" style="width:90px">Size</th><th class="fmh" style="width:150px">Modified</th><th style="width:100px">Actions</th></tr></thead><tbody id="fB"></tbody></table></div></div>
+<div class="cd"><div style="overflow-x:auto;position:relative"><table class="ft"><thead><tr><th>Name</th><th class="fmh" style="width:100px">Size</th><th class="fmh" style="width:150px">Modified</th><th style="width:100px">Actions</th></tr></thead><tbody id="fB"></tbody></table></div></div>
 <div class="ed" id="ed">
 <div class="ed-h"><div class="ed-file"><i data-lucide="file-code"></i><span id="eP">-</span></div><div style="display:flex;gap:6px"><button class="btn btn-xs btn-ac" onclick="sEd()"><i data-lucide="save"></i>Save</button><button class="btn btn-xs" onclick="cEd()"><i data-lucide="x"></i>Close</button></div></div>
 <textarea class="ed-area" id="eA" spellcheck="false"></textarea>
@@ -453,6 +552,18 @@ html{font-size:13px}
 </div>
 </div>
 
+<!-- MARKETPLACE -->
+<div class="vw" id="v-market">
+<div class="mk-search">
+<input type="text" id="mkQuery" placeholder="Search Modrinth plugins..." onkeydown="if(event.key==='Enter')mkSearch()">
+<button class="btn btn-ac" onclick="mkSearch()"><i data-lucide="search"></i>Search</button>
+<button class="btn" onclick="mkFeatured()"><i data-lucide="star"></i>Featured</button>
+</div>
+<div id="mkResults">
+<div class="empty"><i data-lucide="package-search"></i><p>Search for plugins or browse featured</p></div>
+</div>
+</div>
+
 <!-- SCHEDULES -->
 <div class="vw" id="v-sched">
 <div class="ctrls">
@@ -487,6 +598,7 @@ html{font-size:13px}
 <div class="vw" id="v-info">
 <div class="ctrls">
 <button class="btn" onclick="lInfo()"><i data-lucide="refresh-cw"></i>Refresh</button>
+<button class="btn" onclick="openServerSettings()" id="btnSrvSettings" style="display:none"><i data-lucide="settings"></i>Server Settings</button>
 </div>
 <div class="info-grid" id="infoGrid">
 <div class="info-card"><div class="ic-lbl"><i data-lucide="box"></i>Server Version</div><div class="ic-val mono" id="siVer">Loading...</div></div>
@@ -506,13 +618,41 @@ html{font-size:13px}
 </div>
 </div>
 
+<!-- USER MANAGEMENT -->
+<div class="vw" id="v-users">
+<div class="ctrls">
+<button class="btn btn-ac" onclick="openAddUserModal()"><i data-lucide="user-plus"></i>Add User</button>
+<button class="btn" onclick="lUsers()"><i data-lucide="refresh-cw"></i>Refresh</button>
+</div>
+<div class="cd">
+<div class="cd-h"><div class="cd-hl"><i data-lucide="users"></i>Panel Users</div><span class="log-count" id="usrCnt">0 users</span></div>
+<div style="overflow-x:auto">
+<table class="user-table">
+<thead><tr><th>Username</th><th>Role</th><th class="fmh">Created</th><th class="fmh">Last Login</th><th style="width:160px">Actions</th></tr></thead>
+<tbody id="usrB"><tr><td colspan="5"><div class="empty"><i data-lucide="users"></i><p>Loading...</p></div></td></tr></tbody>
+</table>
+</div>
+</div>
+</div>
+
+<!-- AUDIT LOG -->
+<div class="vw" id="v-audit">
+<div class="ctrls">
+<button class="btn" onclick="lAudit()"><i data-lucide="refresh-cw"></i>Refresh</button>
+</div>
+<div class="cd">
+<div class="cd-h"><div class="cd-hl"><i data-lucide="scroll-text"></i>Audit Log</div></div>
+<div class="cd-body" id="auditBody"><div class="empty"><i data-lucide="scroll-text"></i><p>Loading audit log...</p></div></div>
+</div>
+</div>
+
 </div>
 </div>
 </div>
 
 <div class="toasts" id="tsts"></div>
 
-<div class="mo-bg" id="moBg">
+<div class="mo-bg" id="moBg" onclick="if(event.target===this)clMo()">
 <div class="mo-box" id="moBox">
 <h3 id="moT">Create</h3>
 <p id="moD">Enter a name below.</p>
@@ -525,388 +665,1336 @@ html{font-size:13px}
 </div>
 
 <script>
+/* ═══════════════════════════════════════════
+   MCPanel v2 - Complete Admin Panel
+   ═══════════════════════════════════════════ */
+
 const API_BASE = 'https://wings.projectxglory.qzz.io';
 
+// ── State ──
 lucide.createIcons();
-let cDir='/',ePath='',moMeta={},conI=null,logAutoI=null,logAutoOn=false;
+let cDir = '/';
+let ePath = '';
+let moMeta = {};
+let conI = null;
+let logAutoI = null;
+let logAutoOn = false;
+let conAutoScroll = true;
+let currentServerId = null;
+let currentUser = null;
+let serversList = [];
+let rfI = null;
+let cmdHistory = [];
+let cmdHistoryIdx = -1;
 
-/* ── auth ── */
-function getToken(){return sessionStorage.getItem('mcpanel_token')||null}
-function setToken(t){sessionStorage.setItem('mcpanel_token',t)}
-function clearToken(){sessionStorage.removeItem('mcpanel_token')}
+// Chart data arrays (max 60 points)
+const chartData = { cpu: [], ram: [], tps: [], labels: [] };
+const MAX_CHART_PTS = 60;
+let chartCpu = null, chartRam = null, chartTps = null;
 
-async function doLogin(){
-  const pw=document.getElementById('loginPw').value;
-  const err=document.getElementById('loginErr');
-  const btn=document.getElementById('loginBtn');
-  if(!pw){err.textContent='Enter a password';return}
-  err.textContent='';btn.disabled=true;btn.textContent='Checking...';
-  try{
-    const r=await fetch(API_BASE+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
-    const d=await r.json();
-    if(d.success&&d.token){
-      setToken(d.token);
-      document.getElementById('loginOv').classList.add('off');
-      document.getElementById('mainShell').style.display='';
-      lucide.createIcons();
-      initApp();
-    }else{
-      err.textContent='Invalid password';
-    }
-  }catch(e){err.textContent='Connection failed'}
-  btn.disabled=false;btn.textContent='Unlock';
+// ── Auth helpers ──
+function getToken() { return sessionStorage.getItem('mcpanel_token') || null; }
+function setToken(t) { sessionStorage.setItem('mcpanel_token', t); }
+function clearToken() { sessionStorage.removeItem('mcpanel_token'); }
+function setUser(u) { currentUser = u; sessionStorage.setItem('mcpanel_user', JSON.stringify(u)); }
+function getUser() {
+  if (currentUser) return currentUser;
+  try { const s = sessionStorage.getItem('mcpanel_user'); return s ? JSON.parse(s) : null; } catch { return null; }
+}
+function clearUser() { currentUser = null; sessionStorage.removeItem('mcpanel_user'); }
+function isAdmin() { const u = getUser(); return u && (u.role === 'owner' || u.role === 'admin'); }
+function isOwner() { const u = getUser(); return u && u.role === 'owner'; }
+
+// ── Player avatar helper ──
+function playerAvatar(name) {
+  return '<img src="https://crafatar.com/avatars/' + encodeURIComponent(name) + '?size=32&overlay" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<i data-lucide=\\\'user\\\'></i>\';lucide.createIcons({nodes:[this.parentElement]})" style="width:32px;height:32px;border-radius:6px" class="hide-xs">';
 }
 
-function doLogout(){
-  clearToken();
+// ── Login ──
+async function doLogin() {
+  const user = document.getElementById('loginUser').value.trim();
+  const pw = document.getElementById('loginPw').value;
+  const err = document.getElementById('loginErr');
+  const btn = document.getElementById('loginBtn');
+  if (!user || !pw) { err.textContent = 'Enter username and password'; return; }
+  err.textContent = ''; btn.disabled = true; btn.textContent = 'Logging in...';
+  try {
+    const r = await fetch(API_BASE + '/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: user, password: pw })
+    });
+    const d = await r.json();
+    if (d.success && d.token) {
+      setToken(d.token);
+      if (d.user) setUser(d.user);
+      document.getElementById('loginOv').classList.add('off');
+      document.getElementById('mainShell').style.display = '';
+      lucide.createIcons();
+      initApp();
+    } else {
+      err.textContent = d.message || 'Invalid credentials';
+    }
+  } catch (e) { err.textContent = 'Connection failed'; }
+  btn.disabled = false; btn.textContent = 'Login';
+}
+
+function doLogout() {
+  clearToken(); clearUser();
+  currentServerId = null;
   document.getElementById('loginOv').classList.remove('off');
-  document.getElementById('mainShell').style.display='none';
-  document.getElementById('loginPw').value='';
-  document.getElementById('loginErr').textContent='';
-  if(conI)clearInterval(conI);
-  if(logAutoI)clearInterval(logAutoI);
+  document.getElementById('mainShell').style.display = 'none';
+  document.getElementById('loginPw').value = '';
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginErr').textContent = '';
+  if (conI) clearInterval(conI);
+  if (logAutoI) clearInterval(logAutoI);
+  if (rfI) clearInterval(rfI);
+  // Destroy charts
+  if (chartCpu) { chartCpu.destroy(); chartCpu = null; }
+  if (chartRam) { chartRam.destroy(); chartRam = null; }
+  if (chartTps) { chartTps.destroy(); chartTps = null; }
 }
 
 // Check auth on load
-(function(){
-  if(getToken()){
+(function () {
+  if (getToken()) {
     document.getElementById('loginOv').classList.add('off');
-    document.getElementById('mainShell').style.display='';
+    document.getElementById('mainShell').style.display = '';
     initApp();
   }
 })();
 
-/* ── sidebar ── */
-function openSb(){document.getElementById('sb').classList.add('open');document.getElementById('shade').classList.add('on')}
-function closeSb(){document.getElementById('sb').classList.remove('open');document.getElementById('shade').classList.remove('on')}
+// ── Sidebar ──
+function openSb() { document.getElementById('sb').classList.add('open'); document.getElementById('shade').classList.add('on'); }
+function closeSb() { document.getElementById('sb').classList.remove('open'); document.getElementById('shade').classList.remove('on'); }
 
-/* ── nav ── */
-const titles={dash:'Dashboard',con:'Console',files:'Files',props:'Configuration',ppl:'Players',plugins:'Plugins',sched:'Schedules',logs:'Logs',info:'Server Info'};
-function go(v,el){
-  document.querySelectorAll('.vw').forEach(x=>x.classList.remove('on'));
-  document.querySelectorAll('.sb-item').forEach(x=>x.classList.remove('on'));
-  document.getElementById('v-'+v).classList.add('on');
-  if(el)el.classList.add('on');
-  document.getElementById('hT').textContent=titles[v]||v;
-  if(conI)clearInterval(conI);
-  if(logAutoI){clearInterval(logAutoI);logAutoI=null;logAutoOn=false;document.getElementById('logAutoBtn').classList.remove('btn-gn')}
-  if(v==='con'){fCon();conI=setInterval(fCon,3000)}
-  if(v==='files')lDir(cDir);
-  if(v==='props')lProp();
-  if(v==='ppl'){lPpl();lOps();lBan()}
-  if(v==='plugins')lPlugins();
-  if(v==='sched')lSched();
-  if(v==='logs')fLogs();
-  if(v==='info')lInfo();
+// ── Build sidebar ──
+function buildSidebar() {
+  const nav = document.getElementById('sbNav');
+  const foot = document.getElementById('sbFoot');
+  const u = getUser();
+  const admin = isAdmin();
+  let html = '';
+
+  // General section
+  html += '<div class="sb-lbl">General</div>';
+  html += '<button class="sb-item on" data-page="dash" onclick="go(\'dash\',this)"><i data-lucide="layout-dashboard"></i>Dashboard</button>';
+  html += '<button class="sb-item" data-page="con" onclick="go(\'con\',this)"><i data-lucide="terminal"></i>Console</button>';
+
+  // Servers section
+  html += '<div class="sb-lbl">Servers</div>';
+  serversList.forEach(s => {
+    const active = s.id === currentServerId ? ' active' : '';
+    const dotCls = s.status === 'online' ? 'on' : 'off';
+    html += '<button class="sb-srv-item' + active + '" onclick="selectServer(' + s.id + ',this)"><span class="sb-dot ' + dotCls + '"></span>' + escHtml(s.name) + '</button>';
+  });
+  if (admin) {
+    html += '<button class="sb-create-srv" onclick="openCreateServerModal()"><i data-lucide="plus"></i>Create Server</button>';
+  }
+
+  // Manage section
+  html += '<div class="sb-lbl">Manage</div>';
+  html += '<button class="sb-item" data-page="files" onclick="go(\'files\',this)"><i data-lucide="folder-open"></i>Files</button>';
+  html += '<button class="sb-item" data-page="props" onclick="go(\'props\',this)"><i data-lucide="sliders-horizontal"></i>Configuration</button>';
+  html += '<button class="sb-item" data-page="ppl" onclick="go(\'ppl\',this)"><i data-lucide="users-round"></i>Players</button>';
+  html += '<button class="sb-item" data-page="plugins" onclick="go(\'plugins\',this)"><i data-lucide="puzzle"></i>Plugins</button>';
+  html += '<button class="sb-item" data-page="market" onclick="go(\'market\',this)"><i data-lucide="shopping-bag"></i>Marketplace</button>';
+
+  // Tools section
+  html += '<div class="sb-lbl">Tools</div>';
+  html += '<button class="sb-item" data-page="sched" onclick="go(\'sched\',this)"><i data-lucide="calendar-clock"></i>Schedules</button>';
+  html += '<button class="sb-item" data-page="logs" onclick="go(\'logs\',this)"><i data-lucide="scroll-text"></i>Logs</button>';
+  html += '<button class="sb-item" data-page="info" onclick="go(\'info\',this)"><i data-lucide="info"></i>Server Info</button>';
+
+  // Admin section (owner/admin only)
+  if (admin) {
+    html += '<div class="sb-lbl">Admin</div>';
+    html += '<button class="sb-item" data-page="users" onclick="go(\'users\',this)"><i data-lucide="user-cog"></i>Users</button>';
+    html += '<button class="sb-item" data-page="audit" onclick="go(\'audit\',this)"><i data-lucide="file-search"></i>Audit Log</button>';
+  }
+
+  nav.innerHTML = html;
+
+  // Build footer
+  let fhtml = '';
+  if (u) {
+    const roleCls = 'role-' + (u.role || 'viewer');
+    fhtml += '<div class="sb-user">';
+    fhtml += '<div class="sb-user-avatar"><i data-lucide="user"></i></div>';
+    fhtml += '<span class="sb-user-name">' + escHtml(u.username) + '</span>';
+    fhtml += '<span class="sb-user-role ' + roleCls + '">' + escHtml(u.role || 'viewer') + '</span>';
+    fhtml += '</div>';
+  }
+  fhtml += '<div class="sb-pill"><div class="sb-dot off" id="sDot"></div><span class="sb-stx off" id="sTx">Offline</span></div>';
+  fhtml += '<div class="sb-extra" id="sUp">Uptime: --</div>';
+  fhtml += '<button class="sb-logout" onclick="doLogout()"><i data-lucide="log-out"></i>Logout</button>';
+  foot.innerHTML = fhtml;
+
+  // Show/hide server settings button
+  const btn = document.getElementById('btnSrvSettings');
+  if (btn) btn.style.display = admin ? '' : 'none';
+
+  lucide.createIcons();
+}
+
+// ── Build header server selector (mobile) ──
+function buildHdSrvSel() {
+  const sel = document.getElementById('hdSrvSel');
+  let html = '';
+  serversList.forEach(s => {
+    const selected = s.id === currentServerId ? ' selected' : '';
+    html += '<option value="' + s.id + '"' + selected + '>' + escHtml(s.name) + '</option>';
+  });
+  sel.innerHTML = html;
+}
+
+// ── Server selection ──
+async function selectServer(id, btnEl) {
+  if (id === currentServerId) return;
+  currentServerId = id;
+  // Update sidebar active state
+  document.querySelectorAll('.sb-srv-item').forEach(el => el.classList.remove('active'));
+  if (btnEl) {
+    btnEl.classList.add('active');
+  } else {
+    document.querySelectorAll('.sb-srv-item').forEach(el => {
+      if (el.onclick && el.onclick.toString().includes(id)) el.classList.add('active');
+    });
+  }
+  buildHdSrvSel();
+  // Reset state
+  cDir = '/';
+  if (chartCpu) { chartCpu.destroy(); chartCpu = null; }
+  if (chartRam) { chartRam.destroy(); chartRam = null; }
+  if (chartTps) { chartTps.destroy(); chartTps = null; }
+  chartData.cpu = []; chartData.ram = []; chartData.tps = []; chartData.labels = [];
+  closeSb();
+  nt('Switched to server #' + id, 'nf');
+  initCharts();
+  rf();
+  lDir('/');
+}
+
+// ── Fetch servers list ──
+async function fetchServers() {
+  try {
+    const d = await $a('/servers', 'GET');
+    if (d && d.servers) {
+      serversList = d.servers;
+      // Auto-select first server if none selected
+      if (!currentServerId && serversList.length > 0) {
+        currentServerId = serversList[0].id;
+      }
+      buildSidebar();
+      buildHdSrvSel();
+    }
+  } catch (e) {
+    // Silently fail - servers list might not be available
+  }
+}
+
+// ── Navigation ──
+const titles = {
+  dash: 'Dashboard', con: 'Console', files: 'Files', props: 'Configuration',
+  ppl: 'Players', plugins: 'Plugins', sched: 'Schedules', logs: 'Logs',
+  info: 'Server Info', users: 'Users', market: 'Marketplace', audit: 'Audit Log'
+};
+
+function go(v, el) {
+  document.querySelectorAll('.vw').forEach(x => { x.classList.remove('on'); });
+  document.querySelectorAll('.sb-item').forEach(x => x.classList.remove('on'));
+  const vw = document.getElementById('v-' + v);
+  if (vw) {
+    // Trigger reflow for animation
+    vw.style.display = 'block';
+    void vw.offsetWidth;
+    vw.classList.add('on');
+  }
+  if (el) el.classList.add('on');
+  document.getElementById('hT').textContent = titles[v] || v;
+
+  // Clear intervals
+  if (conI) { clearInterval(conI); conI = null; }
+  if (logAutoI) { clearInterval(logAutoI); logAutoI = null; logAutoOn = false; document.getElementById('logAutoBtn').classList.remove('btn-gn'); }
+
+  // Page-specific init
+  if (v === 'con') { fCon(); conI = setInterval(fCon, 3000); }
+  if (v === 'files') lDir(cDir);
+  if (v === 'props') lProp();
+  if (v === 'ppl') { lPpl(); lOps(); lBan(); }
+  if (v === 'plugins') lPlugins();
+  if (v === 'sched') lSched();
+  if (v === 'logs') fLogs();
+  if (v === 'info') lInfo();
+  if (v === 'users') lUsers();
+  if (v === 'audit') lAudit();
+  if (v === 'market') mkFeatured();
+  if (v === 'dash') lBackups();
+
   closeSb();
 }
 
-/* ── toast ── */
-function nt(m,t='nf'){const w=document.getElementById('tsts'),e=document.createElement('div');e.className='tst '+t;const ic={ok:'check-circle',er:'alert-circle',nf:'info'};e.innerHTML=`<i data-lucide="${ic[t]||'info'}"></i><span>${m}</span>`;w.appendChild(e);lucide.createIcons({nodes:[e]});setTimeout(()=>e.remove(),4000)}
+// ── Toast ──
+function nt(m, t) {
+  t = t || 'nf';
+  const w = document.getElementById('tsts');
+  const e = document.createElement('div');
+  e.className = 'tst ' + t;
+  const ic = { ok: 'check-circle', er: 'alert-circle', nf: 'info' };
+  e.innerHTML = '<i data-lucide="' + (ic[t] || 'info') + '"></i><span>' + escHtml(m) + '</span>';
+  w.appendChild(e);
+  lucide.createIcons({ nodes: [e] });
+  setTimeout(function () { e.remove(); }, 4000);
+}
 
-/* ── API helper with auth ── */
-async function $a(p,m='GET',b=null){
-  try{
-    const tk=getToken();
-    const o={method:m,headers:{}};
-    if(tk)o.headers['Authorization']='Bearer '+tk;
-    if(b){o.headers['Content-Type']='application/json';o.body=JSON.stringify(b)}
-    const fullUrl=API_BASE+'/api'+p;
-    const r=await fetch(fullUrl,o);
-    if(r.status===401){doLogout();nt('Session expired','er');return null}
-    if(!r.ok)throw new Error(`API Error: ${r.status}`);
+// ── HTML escape ──
+function escHtml(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
+// ── API helper with auth and multi-server ──
+async function $a(path, method, body) {
+  method = method || 'GET';
+  try {
+    const tk = getToken();
+    const o = { method: method, headers: {} };
+    if (tk) o.headers['Authorization'] = 'Bearer ' + tk;
+    if (body) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(body); }
+
+    // Build URL with server prefix
+    let url = path;
+    if (currentServerId && path.charAt(0) === '/') {
+      // Skip paths that are server-agnostic
+      const skip = ['/servers/', '/auth/', '/users/', '/marketplace/'];
+      let isSkip = false;
+      for (let i = 0; i < skip.length; i++) {
+        if (path.indexOf(skip[i]) === 0) { isSkip = true; break; }
+      }
+      if (!isSkip) {
+        url = '/servers/' + currentServerId + path;
+      }
+    }
+
+    const r = await fetch(API_BASE + '/api' + url, o);
+    if (r.status === 401) { doLogout(); nt('Session expired', 'er'); return null; }
+    if (!r.ok) throw new Error('API Error: ' + r.status);
     return await r.json();
-  }catch(e){nt('API Error: '+e.message,'er');return null}
+  } catch (e) {
+    nt('API Error: ' + e.message, 'er');
+    return null;
+  }
 }
 
 // Upload with auth (FormData)
-function $upload(url,fd){
-  const tk=getToken();
-  if(tk)fd.append('_token',tk);
-  const h={};
-  if(tk)h['Authorization']='Bearer '+tk;
-  return fetch(API_BASE+'/api'+url,{method:'POST',body:fd,headers:h});
+function $upload(url, fd) {
+  const tk = getToken();
+  const h = {};
+  if (tk) h['Authorization'] = 'Bearer ' + tk;
+  // Add server prefix
+  let finalUrl = url;
+  if (currentServerId && url.charAt(0) === '/' && url.indexOf('/servers/') !== 0 && url.indexOf('/auth/') !== 0 && url.indexOf('/users/') !== 0) {
+    finalUrl = '/servers/' + currentServerId + url;
+  }
+  return fetch(API_BASE + '/api' + finalUrl, { method: 'POST', body: fd, headers: h });
 }
 
-/* ── init ── */
-function initApp(){
+// ── Init ──
+async function initApp() {
   lucide.createIcons();
-  rf();setInterval(rf,5000);lDir('/');
+  await fetchServers();
+  buildSidebar();
+  initCharts();
+  rf();
+  if (rfI) clearInterval(rfI);
+  rfI = setInterval(rf, 5000);
+  lDir('/');
+  lBackups();
 }
 
-/* ── dashboard ── */
-async function rf(){
-  const s=await $a('/status');if(!s)return;
-  const d=document.getElementById('sDot'),t=document.getElementById('sTx'),u=document.getElementById('sUp');
-  if(s.running){d.className='sb-dot on';t.className='sb-stx on';t.textContent='Online'}
-  else{d.className='sb-dot off';t.className='sb-stx off';t.textContent='Offline'}
-  u.textContent='Uptime: '+(s.uptime||'--');
-  document.getElementById('dC').textContent=s.cpu+'%';
-  document.getElementById('dCB').style.width=Math.min(s.cpu,100)+'%';
-  document.getElementById('dR').textContent=s.ram_used+' MB';
-  document.getElementById('dRH').textContent='of '+s.ram_total+' MB';
-  const rp=s.ram_total?(s.ram_used/s.ram_total*100):0;
-  document.getElementById('dRB').style.width=rp+'%';
-  document.getElementById('dD').textContent=s.disk_used+' GB';
-  document.getElementById('dDH').textContent='of '+s.disk_total+' GB';
-  const dp=s.disk_total?(s.disk_used/s.disk_total*100):0;
-  document.getElementById('dDB').style.width=dp+'%';
-  document.getElementById('dU').textContent=s.uptime||'--';
-  document.getElementById('dJ').textContent=s.java_version||'-';
-  // TPS
-  const tps=s.tps||20;
-  const tpsEl=document.getElementById('dTPS');
-  const tpsIc=document.getElementById('dTI');
-  const tpsH=document.getElementById('dTH');
-  tpsEl.textContent=tps.toFixed(1);
-  if(tps>=19){tpsEl.style.color='var(--gn)';tpsIc.className='st-ic gn';tpsH.textContent='Excellent'}
-  else if(tps>=15){tpsEl.style.color='var(--am)';tpsIc.className='st-ic am';tpsH.textContent='Fair'}
-  else{tpsEl.style.color='var(--rd)';tpsIc.className='st-ic rd';tpsH.textContent='Low!'}
-  const p=await $a('/players');if(p)document.getElementById('dP').textContent=p.count;
-  const st=await $a('/stats');if(st){document.getElementById('xJ').textContent=st.total_joins;document.getElementById('xD').textContent=st.deaths;document.getElementById('xA').textContent=st.advancements;document.getElementById('xC').textContent=st.chat_messages}
-}
+// ── Charts ──
+function initCharts() {
+  if (chartCpu) { chartCpu.destroy(); chartCpu = null; }
+  if (chartRam) { chartRam.destroy(); chartRam = null; }
+  if (chartTps) { chartTps.destroy(); chartTps = null; }
 
-/* ── actions ── */
-async function act(a){nt('Sending '+a+'...','nf');const r=await $a('/'+a,'POST');r?.success?nt(r.message,'ok'):nt(r?.message||'Failed','er');setTimeout(rf,3000)}
+  const gridColor = 'rgba(30,30,36,0.6)';
+  const tickColor = '#5c5c66';
 
-/* ── console ── */
-async function fCon(){const d=await $a('/console');if(!d)return;const el=document.getElementById('tB');const ab=el.scrollHeight-el.scrollTop-el.clientHeight<60;el.textContent=d.logs;if(ab)el.scrollTop=el.scrollHeight}
-async function sCmd(){const i=document.getElementById('tI'),c=i.value.trim();if(!c)return;const r=await $a('/command','POST',{command:c});r?.success?nt('Sent: '+c,'ok'):nt('Failed','er');i.value='';setTimeout(fCon,800)}
-
-/* ── files ── */
-async function lDir(p){
-  cDir=p||'/';
-  const d=await $a('/files?path='+encodeURIComponent(cDir));if(!d||d.error){nt(d?.error||'Failed','er');return}
-  const cb=document.getElementById('cr');const pts=cDir.split('/').filter(Boolean);
-  let ch=`<span class="crumb" onclick="lDir('/')">root</span>`;let ac='';
-  pts.forEach(p=>{ac+='/'+p;const pp=ac;ch+=`<span class="crumb-s">/</span><span class="crumb" onclick="lDir('${pp}')">${p}</span>`});
-  cb.innerHTML=ch;
-  const tb=document.getElementById('fB');let h='';
-  if(cDir!=='/'&&cDir!=='.'){const pr=cDir.split('/').slice(0,-1).join('/')||'/';h+=`<tr ondblclick="lDir('${pr}')"><td><div class="fn"><div class="fi dir"><i data-lucide="corner-left-up"></i></div><span class="ftx">..</span></div></td><td class="fmeta fmh">-</td><td class="fmeta fmh">-</td><td>-</td></tr>`}
-  const sr=d.files.sort((a,b)=>{if(a.is_dir!==b.is_dir)return a.is_dir?-1:1;return a.name.localeCompare(b.name)});
-  sr.forEach(f=>{const ic=f.is_dir?'dir':fIC(f.name);const nm=f.is_dir?'folder':fIN(f.name);const sz=f.is_dir?'-':fSz(f.size);const db=f.is_dir?`ondblclick="lDir('${f.path}')"`:`ondblclick="oEd('${f.path}')"`;h+=`<tr ${db}><td><div class="fn"><div class="fi ${ic}"><i data-lucide="${nm}"></i></div><span class="ftx">${f.name}</span></div></td><td class="fmeta fmh">${sz}</td><td class="fmeta fmh">${f.modified}</td><td><div class="fact">${!f.is_dir?`<button class="btn btn-xs btn-ic" onclick="event.stopPropagation();oEd('${f.path}')" title="Edit"><i data-lucide="pencil"></i></button><button class="btn btn-xs btn-ic" onclick="event.stopPropagation();dlFile('${f.path}')" title="Download"><i data-lucide="download"></i></button>`:''}<button class="btn btn-xs btn-ic" onclick="event.stopPropagation();openMo('Rename','${f.name}','rename','${f.path}')" title="Rename"><i data-lucide="type"></i></button><button class="btn btn-xs btn-ic" onclick="event.stopPropagation();delF('${f.path}','${f.name}')" title="Delete"><i data-lucide="trash-2"></i></button></div></td></tr>`});
-  if(!sr.length)h+=`<tr><td colspan="4"><div class="empty"><i data-lucide="folder-open"></i><p>Empty directory</p></div></td></tr>`;
-  tb.innerHTML=h;lucide.createIcons();
-}
-
-function fIC(n){const e=n.split('.').pop().toLowerCase();if(['yml','yaml','json','properties','toml'].includes(e))return'cfg';if(['log','txt'].includes(e))return'log';if(e==='jar')return'jar';if(['sh','py','js','ts'].includes(e))return'code';return'gen'}
-function fIN(n){const e=n.split('.').pop().toLowerCase();if(['yml','yaml','json','properties','toml'].includes(e))return'file-cog';if(['log','txt'].includes(e))return'file-text';if(e==='jar')return'package';if(['sh','py','js','ts'].includes(e))return'file-code';if(['png','jpg','gif','svg','ico'].includes(e))return'image';if(['dat','dat_old','mca','mcr','nbt'].includes(e))return'database';return'file'}
-function fSz(b){if(!b)return'0 B';const u=['B','KB','MB','GB'];const i=Math.floor(Math.log(b)/Math.log(1024));return(b/Math.pow(1024,i)).toFixed(i?1:0)+' '+u[i]}
-
-async function oEd(p){const d=await $a('/file/read?path='+encodeURIComponent(p));if(!d||d.error){nt(d?.error||'Cannot open','er');return}ePath=p;document.getElementById('eP').textContent=p;document.getElementById('eA').value=d.content;document.getElementById('ed').classList.add('on');lucide.createIcons()}
-async function sEd(){const r=await $a('/file/save','POST',{path:ePath,content:document.getElementById('eA').value});r?.success?nt('Saved','ok'):nt(r?.message||'Failed','er')}
-function cEd(){document.getElementById('ed').classList.remove('on')}
-async function delF(p,n){if(!confirm('Delete "'+n+'"?'))return;const r=await $a('/file/delete','POST',{path:p});r?.success?(nt('Deleted','ok'),lDir(cDir)):nt(r?.message||'Failed','er')}
-function dlFile(p){const tk=getToken();const a=document.createElement('a');a.href=API_BASE+'/api/file/download?path='+encodeURIComponent(p)+(tk?'&_token='+tk:'');a.download='';document.body.appendChild(a);a.click();a.remove();nt('Downloading...','nf')}
-
-async function upFile(inp){
-  if(!inp.files.length)return;
-  for(const f of inp.files){nt('Uploading '+f.name+'...','nf');const fd=new FormData();fd.append('file',f);fd.append('path',cDir==='/'?'/':cDir);
-  try{const r=await $upload('/file/upload',fd);const d=await r.json();d.success?nt(d.message,'ok'):nt(d.message||'Failed','er')}catch(e){nt('Upload failed','er')}}
-  inp.value='';lDir(cDir);
-}
-
-document.getElementById('eA').addEventListener('keydown',function(e){if(e.key==='Tab'){e.preventDefault();const s=this.selectionStart,end=this.selectionEnd;this.value=this.value.substring(0,s)+'  '+this.value.substring(end);this.selectionStart=this.selectionEnd=s+2}});
-
-/* ── properties ── */
-async function lProp(){const d=await $a('/properties');if(!d)return;const t=document.getElementById('pT');let h='';Object.entries(d.properties).sort().forEach(([k,v])=>{h+=`<tr><td class="pk">${k}</td><td><input class="pi" data-key="${k}" value="${v}"></td></tr>`});t.innerHTML=h}
-async function sProp(){const p={};document.querySelectorAll('.pi').forEach(i=>p[i.dataset.key]=i.value);const r=await $a('/properties','POST',{properties:p});r?.success?nt(r.message,'ok'):nt(r?.message||'Failed','er')}
-
-/* ── players ── */
-async function lPpl(){
-  const d=await $a('/players');if(!d)return;
-  const g=document.getElementById('pG');
-  if(!d.players.length){g.innerHTML='<div class="empty"><i data-lucide="user-x"></i><p>No players online</p></div>';lucide.createIcons();return}
-  let h='';d.players.forEach(n=>{
-  h+=`<div class="pc"><div class="pa"><i data-lucide="user"></i></div><div style="flex:1"><div class="pn">${n}</div><div class="po"><span class="po-d"></span>Online</div></div><div style="display:flex;gap:4px"><button class="btn btn-xs btn-ic" onclick="pMo('kick');setTimeout(()=>document.getElementById('pmP').value='${n}',100)" title="Kick"><i data-lucide="user-minus"></i></button><button class="btn btn-xs btn-ic" onclick="pMo('gm');setTimeout(()=>document.getElementById('pmP').value='${n}',100)" title="Gamemode"><i data-lucide="gamepad-2"></i></button><button class="btn btn-xs btn-ic" onclick="pMo('tp');setTimeout(()=>document.getElementById('pmP').value='${n}',100)" title="TP"><i data-lucide="map-pin"></i></button></div></div>`});
-  g.innerHTML=h;lucide.createIcons();
-}
-
-async function lOps(){const d=await $a('/ops');if(!d)return;const el=document.getElementById('opL');if(!d.ops.length){el.innerHTML='<div class="empty"><p>No operators</p></div>';return}let h='';d.ops.forEach(o=>{const n=o.name||o;h+=`<div class="pmr"><div style="display:flex;align-items:center;gap:8px"><div class="pa" style="width:26px;height:26px"><i data-lucide="crown" style="width:12px;height:12px"></i></div><span class="pn">${n}</span></div><button class="btn btn-xs btn-rd" onclick="pAct('deop','${n}')">Remove</button></div>`});el.innerHTML=h;lucide.createIcons()}
-
-async function lBan(){const d=await $a('/banned');if(!d)return;const el=document.getElementById('bnL');if(!d.banned.length){el.innerHTML='<div class="empty"><p>No banned players</p></div>';return}let h='';d.banned.forEach(b=>{const n=b.name||b;const r=b.reason||'';h+=`<div class="pmr"><div><span class="pn">${n}</span>${r?`<div class="pmi">${r}</div>`:''}</div><button class="btn btn-xs btn-gn" onclick="pAct('unban','${n}')">Unban</button></div>`});el.innerHTML=h;lucide.createIcons()}
-
-async function pAct(a,p,x){const b={player:p};if(x)Object.assign(b,x);const r=await $a('/'+a,'POST',b);r?.success?nt(r.message,'ok'):nt(r?.message||'Failed','er');setTimeout(()=>{lPpl();lOps();lBan()},1000)}
-
-function pMo(a){
-  const cfg={
-  kick:{t:'Kick Player',d:'Enter player name to kick.',f:['player','reason']},
-  ban:{t:'Ban Player',d:'Enter player name to ban.',f:['player','reason']},
-  unban:{t:'Unban Player',d:'Enter player name to unban.',f:['player']},
-  op:{t:'Op Player',d:'Give operator permissions.',f:['player']},
-  deop:{t:'Deop Player',d:'Remove operator permissions.',f:['player']},
-  'wl-add':{t:'Whitelist Add',d:'Add player to whitelist.',f:['player']},
-  'wl-rm':{t:'Whitelist Remove',d:'Remove from whitelist.',f:['player']},
-  gm:{t:'Change Gamemode',d:'Set a player\'s gamemode.',f:['player','mode']},
-  tp:{t:'Teleport',d:'Teleport player to target.',f:['player','target']},
+  const baseOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 300 },
+    plugins: { legend: { display: false }, tooltip: { enabled: true, backgroundColor: '#161619', titleColor: '#ececef', bodyColor: '#9898a0', borderColor: '#1e1e24', borderWidth: 1 } },
+    scales: {
+      x: { display: false },
+      y: { display: true, grid: { color: gridColor, drawBorder: false }, ticks: { color: tickColor, font: { size: 9, family: 'JetBrains Mono' }, maxTicksLimit: 4 } }
+    },
+    elements: { point: { radius: 0 }, line: { tension: 0.3, borderWidth: 1.5 } }
   };
-  const c=cfg[a];if(!c)return;
-  const box=document.getElementById('moBox');
-  let h=`<h3>${c.t}</h3><p>${c.d}</p><input class="mo-f" id="pmP" placeholder="Player name...">`;
-  if(c.f.includes('reason'))h+=`<input class="mo-f" id="pmR" placeholder="Reason (optional)...">`;
-  if(c.f.includes('mode'))h+=`<select class="mo-sel" id="pmM"><option value="survival">Survival</option><option value="creative">Creative</option><option value="adventure">Adventure</option><option value="spectator">Spectator</option></select>`;
-  if(c.f.includes('target'))h+=`<input class="mo-f" id="pmT" placeholder="Target player or x y z...">`;
-  h+=`<div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="exPa('${a}')">Confirm</button></div>`;
-  box.innerHTML=h;document.getElementById('moBg').classList.add('on');
-  setTimeout(()=>{const i=document.getElementById('pmP');if(i)i.focus()},100);
+
+  const cpuCanvas = document.getElementById('chartCpu');
+  if (cpuCanvas) {
+    chartCpu = new Chart(cpuCanvas, {
+      type: 'line',
+      data: { labels: chartData.labels, datasets: [{ data: chartData.cpu, borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.08)', fill: true }] },
+      options: { ...baseOpts, scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, min: 0, max: 100, ticks: { ...baseOpts.scales.y.ticks, callback: function(v) { return v + '%'; } } } } }
+    });
+  }
+
+  const ramCanvas = document.getElementById('chartRam');
+  if (ramCanvas) {
+    chartRam = new Chart(ramCanvas, {
+      type: 'line',
+      data: { labels: chartData.labels, datasets: [{ data: chartData.ram, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', fill: true }] },
+      options: baseOpts
+    });
+  }
+
+  const tpsCanvas = document.getElementById('chartTps');
+  if (tpsCanvas) {
+    chartTps = new Chart(tpsCanvas, {
+      type: 'line',
+      data: { labels: chartData.labels, datasets: [{ data: chartData.tps, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.08)', fill: true }] },
+      options: baseOpts
+    });
+  }
 }
 
-async function exPa(a){
-  const p=document.getElementById('pmP')?.value.trim();if(!p){nt('Enter player name','er');return}
-  clMo();
-  if(a==='kick'){await pAct('kick',p,{reason:document.getElementById('pmR')?.value||'Kicked by admin'})}
-  else if(a==='ban'){await pAct('ban',p,{reason:document.getElementById('pmR')?.value||'Banned by admin'})}
-  else if(a==='unban'){await pAct('unban',p)}
-  else if(a==='op'){await pAct('op',p)}
-  else if(a==='deop'){await pAct('deop',p)}
-  else if(a==='wl-add'){const r=await $a('/whitelist','POST',{action:'add',player:p});r?.success?nt(r.message,'ok'):nt('Failed','er')}
-  else if(a==='wl-rm'){const r=await $a('/whitelist','POST',{action:'remove',player:p});r?.success?nt(r.message,'ok'):nt('Failed','er')}
-  else if(a==='gm'){const m=document.getElementById('pmM')?.value||'survival';const r=await $a('/gamemode','POST',{player:p,mode:m});r?.success?nt(r.message,'ok'):nt('Failed','er')}
-  else if(a==='tp'){const t=document.getElementById('pmT')?.value.trim();if(!t){nt('Enter target','er');return}const r=await $a('/tp','POST',{player:p,target:t});r?.success?nt(r.message,'ok'):nt('Failed','er')}
+function pushChartData(cpuVal, ramVal, tpsVal) {
+  const now = new Date();
+  const label = now.getMinutes() + ':' + String(now.getSeconds()).padStart(2, '0');
+
+  chartData.labels.push(label);
+  chartData.cpu.push(cpuVal);
+  chartData.ram.push(ramVal);
+  chartData.tps.push(tpsVal);
+
+  if (chartData.labels.length > MAX_CHART_PTS) {
+    chartData.labels.shift();
+    chartData.cpu.shift();
+    chartData.ram.shift();
+    chartData.tps.shift();
+  }
+
+  if (chartCpu) chartCpu.update('none');
+  if (chartRam) chartRam.update('none');
+  if (chartTps) chartTps.update('none');
 }
 
-function openSayModal(){
-  const box=document.getElementById('moBox');
-  box.innerHTML=`<h3>Broadcast Message</h3><p>Send a message to all players.</p><input class="mo-f" id="sayI" placeholder="Type message..."><div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="sendSay()">Send</button></div>`;
-  document.getElementById('moBg').classList.add('on');
-  setTimeout(()=>document.getElementById('sayI').focus(),100);
-}
-async function sendSay(){const m=document.getElementById('sayI')?.value.trim();if(!m){nt('Enter a message','er');return}clMo();const r=await $a('/say','POST',{message:m});r?.success?nt(r.message,'ok'):nt('Failed','er')}
+// ── Dashboard refresh ──
+async function rf() {
+  if (!currentServerId) return;
+  const s = await $a('/status');
+  if (!s) return;
 
-/* ── generic modal ── */
-function openMo(t,v,a,x){
-  const box=document.getElementById('moBox');
-  box.innerHTML=`<h3>${t}</h3><p>Enter a name below.</p><input class="mo-f" id="moI" placeholder="Enter name..." value="${v||''}" onkeydown="if(event.key==='Enter')cfmMo()"><div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="cfmMo()">Confirm</button></div>`;
-  document.getElementById('moBg').classList.add('on');
-  moMeta={a,x};
-  setTimeout(()=>document.getElementById('moI').focus(),100);
-}
-function clMo(){document.getElementById('moBg').classList.remove('on')}
+  const d = document.getElementById('sDot');
+  const t = document.getElementById('sTx');
+  const u = document.getElementById('sUp');
 
-async function cfmMo(){
-  const v=document.getElementById('moI')?.value.trim();if(!v)return;clMo();
-  if(moMeta.a==='mkfile'){const p=(cDir==='/'?'':cDir)+'/'+v;const r=await $a('/file/create','POST',{path:p,content:''});r?.success?(nt('Created','ok'),lDir(cDir)):nt('Failed','er')}
-  else if(moMeta.a==='mkdir'){const p=(cDir==='/'?'':cDir)+'/'+v;const r=await $a('/file/mkdir','POST',{path:p});r?.success?(nt('Created','ok'),lDir(cDir)):nt('Failed','er')}
-  else if(moMeta.a==='rename'){const o=moMeta.x;const d=o.substring(0,o.lastIndexOf('/'));const r=await $a('/file/rename','POST',{old_path:o,new_path:d+'/'+v});r?.success?(nt('Renamed','ok'),lDir(cDir)):nt('Failed','er')}
+  if (s.running) { d.className = 'sb-dot on'; t.className = 'sb-stx on'; t.textContent = 'Online'; }
+  else { d.className = 'sb-dot off'; t.className = 'sb-stx off'; t.textContent = 'Offline'; }
+  u.textContent = 'Uptime: ' + (s.uptime || '--');
+
+  document.getElementById('dC').textContent = s.cpu + '%';
+  document.getElementById('dCB').style.width = Math.min(s.cpu, 100) + '%';
+  document.getElementById('dR').textContent = s.ram_used + ' MB';
+  document.getElementById('dRH').textContent = 'of ' + s.ram_total + ' MB';
+  const rp = s.ram_total ? (s.ram_used / s.ram_total * 100) : 0;
+  document.getElementById('dRB').style.width = rp + '%';
+  document.getElementById('dD').textContent = s.disk_used + ' GB';
+  document.getElementById('dDH').textContent = 'of ' + s.disk_total + ' GB';
+  const dp = s.disk_total ? (s.disk_used / s.disk_total * 100) : 0;
+  document.getElementById('dDB').style.width = dp + '%';
+  document.getElementById('dU').textContent = s.uptime || '--';
+  document.getElementById('dJ').textContent = s.java_version || '-';
+
+  // TPS
+  const tps = s.tps || 20;
+  const tpsEl = document.getElementById('dTPS');
+  const tpsIc = document.getElementById('dTI');
+  const tpsH = document.getElementById('dTH');
+  tpsEl.textContent = tps.toFixed(1);
+  if (tps >= 19) { tpsEl.style.color = 'var(--gn)'; tpsIc.className = 'st-ic gn'; tpsH.textContent = 'Excellent'; }
+  else if (tps >= 15) { tpsEl.style.color = 'var(--am)'; tpsIc.className = 'st-ic am'; tpsH.textContent = 'Fair'; }
+  else { tpsEl.style.color = 'var(--rd)'; tpsIc.className = 'st-ic rd'; tpsH.textContent = 'Low!'; }
+
+  // Push chart data
+  pushChartData(parseFloat(s.cpu) || 0, parseFloat(s.ram_used) || 0, parseFloat(tps) || 20);
+
+  const p = await $a('/players');
+  if (p) document.getElementById('dP').textContent = p.count;
+
+  const st = await $a('/stats');
+  if (st) {
+    document.getElementById('xJ').textContent = st.total_joins;
+    document.getElementById('xD').textContent = st.deaths;
+    document.getElementById('xA').textContent = st.advancements;
+    document.getElementById('xC').textContent = st.chat_messages;
+  }
 }
 
-/* ── plugins ── */
-async function lPlugins(){
-  const d=await $a('/plugins');if(!d)return;
-  const tb=document.getElementById('plB');let h='';
-  d.plugins.forEach(p=>{
-    h+=`<tr><td><div class="fn"><div class="fi jar"><i data-lucide="package"></i></div><span class="ftx">${p.name}</span></div></td><td class="fmeta fmh">${p.size_formatted}</td><td class="fmeta fmh">${p.modified}</td><td><div class="fact"><button class="btn btn-xs btn-rd" onclick="event.stopPropagation();delPlugin('${p.name}')" title="Delete"><i data-lucide="trash-2"></i></button></div></td></tr>`;
+// ── Actions ──
+async function act(a) {
+  nt('Sending ' + a + '...', 'nf');
+  const r = await $a('/' + a, 'POST');
+  r && r.success ? nt(r.message, 'ok') : nt((r && r.message) || 'Failed', 'er');
+  setTimeout(rf, 3000);
+}
+
+// ── Console ──
+async function fCon() {
+  const d = await $a('/console');
+  if (!d) return;
+  const el = document.getElementById('tB');
+  const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+  if (d.logs) {
+    el.innerHTML = colorizeLogs(d.logs);
+  } else {
+    el.textContent = 'No output.';
+  }
+  if (wasAtBottom && conAutoScroll) el.scrollTop = el.scrollHeight;
+}
+
+function colorizeLogs(text) {
+  // Split into lines and color code
+  const lines = text.split('\n');
+  return lines.map(function (line) {
+    if (line.indexOf('[ERROR]') !== -1 || line.indexOf('ERROR') !== -1) {
+      return '<span class="log-error">' + escHtml(line) + '</span>';
+    }
+    if (line.indexOf('[WARN]') !== -1 || line.indexOf('WARNING') !== -1) {
+      return '<span class="log-warn">' + escHtml(line) + '</span>';
+    }
+    if (line.indexOf('[INFO]') !== -1) {
+      return '<span class="log-info">' + escHtml(line) + '</span>';
+    }
+    return escHtml(line);
+  }).join('\n');
+}
+
+function clearConsole() {
+  document.getElementById('tB').innerHTML = '<span class="log-info">Console cleared.</span>';
+}
+
+function toggleConAutoScroll() {
+  conAutoScroll = !conAutoScroll;
+  const btn = document.getElementById('conAutoScroll');
+  if (conAutoScroll) { btn.classList.remove('btn-rd'); btn.classList.add('btn-gn'); }
+  else { btn.classList.remove('btn-gn'); btn.classList.add('btn-rd'); }
+}
+
+function handleConKey(e) {
+  if (e.key === 'Enter') {
+    sCmd();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (cmdHistory.length > 0) {
+      if (cmdHistoryIdx < cmdHistory.length - 1) cmdHistoryIdx++;
+      document.getElementById('tI').value = cmdHistory[cmdHistoryIdx] || '';
+    }
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (cmdHistoryIdx > 0) {
+      cmdHistoryIdx--;
+      document.getElementById('tI').value = cmdHistory[cmdHistoryIdx] || '';
+    } else {
+      cmdHistoryIdx = -1;
+      document.getElementById('tI').value = '';
+    }
+  }
+}
+
+async function sCmd() {
+  const i = document.getElementById('tI');
+  const c = i.value.trim();
+  if (!c) return;
+  // Add to command history
+  cmdHistory.unshift(c);
+  if (cmdHistory.length > 100) cmdHistory.pop();
+  cmdHistoryIdx = -1;
+
+  const r = await $a('/command', 'POST', { command: c });
+  r && r.success ? nt('Sent: ' + c, 'ok') : nt('Failed', 'er');
+  i.value = '';
+  setTimeout(fCon, 800);
+}
+
+// ── Files ──
+async function lDir(p) {
+  cDir = p || '/';
+  const d = await $a('/files?path=' + encodeURIComponent(cDir));
+  if (!d || d.error) { nt((d && d.error) || 'Failed', 'er'); return; }
+
+  // Breadcrumbs
+  const cb = document.getElementById('cr');
+  const pts = cDir.split('/').filter(Boolean);
+  let ch = '<span class="crumb" onclick="lDir(\'/\')">root</span>';
+  let ac = '';
+  pts.forEach(function (pt) {
+    ac += '/' + pt;
+    const pp = ac;
+    ch += '<span class="crumb-s">/</span><span class="crumb" onclick="lDir(\'' + pp + '\')">' + escHtml(pt) + '</span>';
   });
-  if(!d.plugins.length)h+=`<tr><td colspan="4"><div class="empty"><i data-lucide="package-open"></i><p>No plugins installed</p></div></td></tr>`;
-  tb.innerHTML=h;
-  document.getElementById('plCnt').textContent=d.plugins.length+' plugin'+(d.plugins.length!==1?'s':'');
+  cb.innerHTML = ch;
+
+  const tb = document.getElementById('fB');
+  let h = '';
+
+  // Parent directory link
+  if (cDir !== '/' && cDir !== '.') {
+    const pr = cDir.split('/').slice(0, -1).join('/') || '/';
+    h += '<tr onclick="lDir(\'' + pr + '\')" class="dir-row"><td><div class="fn"><div class="fi dir"><i data-lucide="corner-left-up"></i></div><span class="ftx">..</span></div></td><td class="fmeta fmh">-</td><td class="fmeta fmh">-</td><td>-</td></tr>';
+  }
+
+  // Sort: directories first, then alphabetically
+  const sr = (d.files || []).sort(function (a, b) {
+    if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  sr.forEach(function (f) {
+    const ic = f.is_dir ? 'dir' : fIC(f.name);
+    const nm = f.is_dir ? 'folder' : fIN(f.name);
+    // Use size_formatted if available, else compute
+    const sz = f.is_dir ? (f.size_formatted || '-') : (f.size_formatted || fSz(f.size));
+    // Folder click navigates, file double-click opens editor
+    const clickHandler = f.is_dir
+      ? 'onclick="lDir(\'' + f.path.replace(/'/g, "\\'") + '\')"'
+      : 'ondblclick="oEd(\'' + f.path.replace(/'/g, "\\'") + '\')"';
+    h += '<tr ' + clickHandler + (f.is_dir ? ' class="dir-row"' : '') + '>';
+    h += '<td><div class="fn"><div class="fi ' + ic + '"><i data-lucide="' + nm + '"></i></div><span class="ftx">' + escHtml(f.name) + '</span></div></td>';
+    h += '<td class="fmeta fmh">' + escHtml(sz) + '</td>';
+    h += '<td class="fmeta fmh">' + escHtml(f.modified || '') + '</td>';
+    h += '<td><div class="fact">';
+    if (!f.is_dir) {
+      h += '<button class="btn btn-xs btn-ic" onclick="event.stopPropagation();oEd(\'' + f.path.replace(/'/g, "\\'") + '\')" title="Edit"><i data-lucide="pencil"></i></button>';
+      h += '<button class="btn btn-xs btn-ic" onclick="event.stopPropagation();dlFile(\'' + f.path.replace(/'/g, "\\'") + '\')" title="Download"><i data-lucide="download"></i></button>';
+    }
+    h += '<button class="btn btn-xs btn-ic" onclick="event.stopPropagation();openMo(\'Rename\',\'' + escHtml(f.name).replace(/'/g, "\\'") + '\',\'rename\',\'' + f.path.replace(/'/g, "\\'") + '\')" title="Rename"><i data-lucide="type"></i></button>';
+    h += '<button class="btn btn-xs btn-ic" onclick="event.stopPropagation();delF(\'' + f.path.replace(/'/g, "\\'") + '\',\'' + escHtml(f.name).replace(/'/g, "\\'") + '\')" title="Delete"><i data-lucide="trash-2"></i></button>';
+    h += '</div></td></tr>';
+  });
+
+  if (!sr.length) {
+    h += '<tr><td colspan="4"><div class="empty"><i data-lucide="folder-open"></i><p>Empty directory</p></div></td></tr>';
+  }
+  tb.innerHTML = h;
   lucide.createIcons();
 }
 
-async function delPlugin(name){
-  if(!confirm('Delete plugin "'+name+'"?\nServer restart required for changes.'))return;
-  const r=await $a('/plugins/delete','POST',{name});
-  r?.success?(nt('Plugin deleted','ok'),lPlugins()):nt(r?.message||'Failed','er');
+function fIC(n) {
+  const e = n.split('.').pop().toLowerCase();
+  if (['yml', 'yaml', 'json', 'properties', 'toml'].indexOf(e) !== -1) return 'cfg';
+  if (['log', 'txt'].indexOf(e) !== -1) return 'log';
+  if (e === 'jar') return 'jar';
+  if (['sh', 'py', 'js', 'ts'].indexOf(e) !== -1) return 'code';
+  return 'gen';
 }
 
-async function upPlugin(inp){
-  if(!inp.files.length)return;
-  for(const f of inp.files){
-    if(!f.name.endsWith('.jar')){nt('Only .jar files allowed','er');continue}
-    nt('Uploading '+f.name+'...','nf');
-    const fd=new FormData();fd.append('file',f);fd.append('path','/plugins');
-    try{const r=await $upload('/file/upload',fd);const d=await r.json();d.success?nt(d.message,'ok'):nt(d.message||'Failed','er')}catch(e){nt('Upload failed','er')}
-  }
-  inp.value='';lPlugins();
+function fIN(n) {
+  const e = n.split('.').pop().toLowerCase();
+  if (['yml', 'yaml', 'json', 'properties', 'toml'].indexOf(e) !== -1) return 'file-cog';
+  if (['log', 'txt'].indexOf(e) !== -1) return 'file-text';
+  if (e === 'jar') return 'package';
+  if (['sh', 'py', 'js', 'ts'].indexOf(e) !== -1) return 'file-code';
+  if (['png', 'jpg', 'gif', 'svg', 'ico'].indexOf(e) !== -1) return 'image';
+  if (['dat', 'dat_old', 'mca', 'mcr', 'nbt'].indexOf(e) !== -1) return 'database';
+  return 'file';
 }
 
-/* ── schedules ── */
-async function lSched(){
-  const d=await $a('/schedules');if(!d)return;
-  const tb=document.getElementById('scB');let h='';
-  d.schedules.forEach(s=>{
-    const en=s.enabled;
-    const min=s.interval_minutes||Math.round(s.interval_seconds/60);
-    h+=`<tr><td><span class="ftx">${s.name}</span></td><td class="fmeta" style="font-size:11px">${s.command}</td><td class="fmeta fmh">${min}m</td><td><button class="tog ${en?'on':''}" onclick="togSched('${s.name}')"></button></td><td class="fmeta fmh">${s.last_run||'Never'}</td><td><div class="fact"><button class="btn btn-xs btn-rd" onclick="event.stopPropagation();delSched('${s.name}')" title="Delete"><i data-lucide="trash-2"></i></button></div></td></tr>`;
-  });
-  if(!d.schedules.length)h+=`<tr><td colspan="6"><div class="empty"><i data-lucide="calendar-clock"></i><p>No scheduled tasks</p></div></td></tr>`;
-  tb.innerHTML=h;
-  document.getElementById('scCnt').textContent=d.schedules.length+' task'+(d.schedules.length!==1?'s':'');
+function fSz(b) {
+  if (!b) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(b) / Math.log(1024));
+  return (b / Math.pow(1024, i)).toFixed(i ? 1 : 0) + ' ' + u[i];
+}
+
+async function oEd(p) {
+  const d = await $a('/file/read?path=' + encodeURIComponent(p));
+  if (!d || d.error) { nt((d && d.error) || 'Cannot open', 'er'); return; }
+  ePath = p;
+  document.getElementById('eP').textContent = p;
+  document.getElementById('eA').value = d.content;
+  document.getElementById('ed').classList.add('on');
   lucide.createIcons();
 }
 
-function openSchedModal(){
-  const box=document.getElementById('moBox');
-  box.innerHTML=`<h3>Add Scheduled Task</h3><p>Create a new task that runs commands automatically.</p><input class="mo-f" id="scName" placeholder="Task name..." style="font-size:12px"><input class="mo-f" id="scCmd" placeholder="Server command (e.g. say Hello)" style="font-size:12px"><input class="mo-f" id="scInt" type="number" min="1" value="5" placeholder="Interval in minutes" style="font-size:12px"><div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="cfmSched()">Create</button></div>`;
+async function sEd() {
+  const r = await $a('/file/save', 'POST', { path: ePath, content: document.getElementById('eA').value });
+  r && r.success ? nt('Saved', 'ok') : nt((r && r.message) || 'Failed', 'er');
+}
+
+function cEd() { document.getElementById('ed').classList.remove('on'); }
+
+async function delF(p, n) {
+  if (!confirm('Delete "' + n + '"?')) return;
+  const r = await $a('/file/delete', 'POST', { path: p });
+  r && r.success ? (nt('Deleted', 'ok'), lDir(cDir)) : nt((r && r.message) || 'Failed', 'er');
+}
+
+function dlFile(p) {
+  const tk = getToken();
+  const a = document.createElement('a');
+  a.href = API_BASE + '/api/servers/' + currentServerId + '/file/download?path=' + encodeURIComponent(p) + (tk ? '&_token=' + tk : '');
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  nt('Downloading...', 'nf');
+}
+
+async function upFile(inp) {
+  if (!inp.files.length) return;
+  for (let i = 0; i < inp.files.length; i++) {
+    const f = inp.files[i];
+    nt('Uploading ' + f.name + '...', 'nf');
+    const fd = new FormData();
+    fd.append('file', f);
+    fd.append('path', cDir === '/' ? '/' : cDir);
+    try {
+      const r = await $upload('/file/upload', fd);
+      const d = await r.json();
+      d.success ? nt(d.message, 'ok') : nt(d.message || 'Failed', 'er');
+    } catch (e) { nt('Upload failed', 'er'); }
+  }
+  inp.value = '';
+  lDir(cDir);
+}
+
+// Tab key in editor
+document.addEventListener('DOMContentLoaded', function () {
+  const ea = document.getElementById('eA');
+  if (ea) {
+    ea.addEventListener('keydown', function (e) {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const s = this.selectionStart;
+        const end = this.selectionEnd;
+        this.value = this.value.substring(0, s) + '  ' + this.value.substring(end);
+        this.selectionStart = this.selectionEnd = s + 2;
+      }
+    });
+  }
+});
+
+// ── Properties ──
+async function lProp() {
+  const d = await $a('/properties');
+  if (!d) return;
+  const t = document.getElementById('pT');
+  let h = '';
+  const entries = Object.entries(d.properties || {}).sort();
+  entries.forEach(function (entry) {
+    const k = entry[0], v = entry[1];
+    h += '<tr><td class="pk">' + escHtml(k) + '</td><td><input class="pi" data-key="' + escHtml(k) + '" value="' + escHtml(v) + '"></td></tr>';
+  });
+  t.innerHTML = h;
+}
+
+async function sProp() {
+  const p = {};
+  document.querySelectorAll('.pi').forEach(function (i) { p[i.dataset.key] = i.value; });
+  const r = await $a('/properties', 'POST', { properties: p });
+  r && r.success ? nt(r.message, 'ok') : nt((r && r.message) || 'Failed', 'er');
+}
+
+// ── Players ──
+async function lPpl() {
+  const d = await $a('/players');
+  if (!d) return;
+  const g = document.getElementById('pG');
+  if (!d.players || !d.players.length) {
+    g.innerHTML = '<div class="empty"><i data-lucide="user-x"></i><p>No players online</p></div>';
+    lucide.createIcons();
+    return;
+  }
+  let h = '';
+  d.players.forEach(function (n) {
+    h += '<div class="pc">';
+    h += '<div class="pc-avatar">' + playerAvatar(n) + '</div>';
+    h += '<div style="flex:1"><div class="pn">' + escHtml(n) + '</div><div class="po"><span class="po-d"></span>Online</div></div>';
+    h += '<div style="display:flex;gap:4px">';
+    h += '<button class="btn btn-xs btn-ic" onclick="pMo(\'kick\');setTimeout(function(){document.getElementById(\'pmP\').value=\'' + escHtml(n).replace(/'/g, "\\'") + '\'},100)" title="Kick"><i data-lucide="user-minus"></i></button>';
+    h += '<button class="btn btn-xs btn-ic" onclick="pMo(\'gm\');setTimeout(function(){document.getElementById(\'pmP\').value=\'' + escHtml(n).replace(/'/g, "\\'") + '\'},100)" title="Gamemode"><i data-lucide="gamepad-2"></i></button>';
+    h += '<button class="btn btn-xs btn-ic" onclick="pMo(\'tp\');setTimeout(function(){document.getElementById(\'pmP\').value=\'' + escHtml(n).replace(/'/g, "\\'") + '\'},100)" title="TP"><i data-lucide="map-pin"></i></button>';
+    h += '</div></div>';
+  });
+  g.innerHTML = h;
+  lucide.createIcons();
+}
+
+async function lOps() {
+  const d = await $a('/ops');
+  if (!d) return;
+  const el = document.getElementById('opL');
+  if (!d.ops || !d.ops.length) { el.innerHTML = '<div class="empty"><p>No operators</p></div>'; return; }
+  let h = '';
+  d.ops.forEach(function (o) {
+    const n = o.name || o;
+    h += '<div class="pmr"><div style="display:flex;align-items:center;gap:8px"><div class="pa" style="width:26px;height:26px"><i data-lucide="crown" style="width:12px;height:12px"></i></div><span class="pn">' + escHtml(n) + '</span></div><button class="btn btn-xs btn-rd" onclick="pAct(\'deop\',\'' + escHtml(n).replace(/'/g, "\\'") + '\')">Remove</button></div>';
+  });
+  el.innerHTML = h;
+  lucide.createIcons();
+}
+
+async function lBan() {
+  const d = await $a('/banned');
+  if (!d) return;
+  const el = document.getElementById('bnL');
+  if (!d.banned || !d.banned.length) { el.innerHTML = '<div class="empty"><p>No banned players</p></div>'; return; }
+  let h = '';
+  d.banned.forEach(function (b) {
+    const n = b.name || b;
+    const r = b.reason || '';
+    h += '<div class="pmr"><div><span class="pn">' + escHtml(n) + '</span>' + (r ? '<div class="pmi">' + escHtml(r) + '</div>' : '') + '</div><button class="btn btn-xs btn-gn" onclick="pAct(\'unban\',\'' + escHtml(n).replace(/'/g, "\\'") + '\')">Unban</button></div>';
+  });
+  el.innerHTML = h;
+  lucide.createIcons();
+}
+
+async function pAct(a, p, x) {
+  const b = { player: p };
+  if (x) Object.assign(b, x);
+  const r = await $a('/' + a, 'POST', b);
+  r && r.success ? nt(r.message, 'ok') : nt((r && r.message) || 'Failed', 'er');
+  setTimeout(function () { lPpl(); lOps(); lBan(); }, 1000);
+}
+
+function pMo(a) {
+  const cfg = {
+    kick: { t: 'Kick Player', d: 'Enter player name to kick.', f: ['player', 'reason'] },
+    ban: { t: 'Ban Player', d: 'Enter player name to ban.', f: ['player', 'reason'] },
+    unban: { t: 'Unban Player', d: 'Enter player name to unban.', f: ['player'] },
+    op: { t: 'Op Player', d: 'Give operator permissions.', f: ['player'] },
+    deop: { t: 'Deop Player', d: 'Remove operator permissions.', f: ['player'] },
+    'wl-add': { t: 'Whitelist Add', d: 'Add player to whitelist.', f: ['player'] },
+    'wl-rm': { t: 'Whitelist Remove', d: 'Remove from whitelist.', f: ['player'] },
+    gm: { t: 'Change Gamemode', d: 'Set a player\'s gamemode.', f: ['player', 'mode'] },
+    tp: { t: 'Teleport', d: 'Teleport player to target.', f: ['player', 'target'] }
+  };
+  const c = cfg[a];
+  if (!c) return;
+  const box = document.getElementById('moBox');
+  let h = '<h3>' + c.t + '</h3><p>' + c.d + '</p>';
+  h += '<input class="mo-f" id="pmP" placeholder="Player name..." style="font-size:12px">';
+  if (c.f.indexOf('reason') !== -1) h += '<input class="mo-f" id="pmR" placeholder="Reason (optional)..." style="font-size:12px">';
+  if (c.f.indexOf('mode') !== -1) h += '<select class="mo-sel" id="pmM"><option value="survival">Survival</option><option value="creative">Creative</option><option value="adventure">Adventure</option><option value="spectator">Spectator</option></select>';
+  if (c.f.indexOf('target') !== -1) h += '<input class="mo-f" id="pmT" placeholder="Target player or x y z..." style="font-size:12px">';
+  h += '<div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="exPa(\'' + a + '\')">Confirm</button></div>';
+  box.innerHTML = h;
   document.getElementById('moBg').classList.add('on');
-  setTimeout(()=>document.getElementById('scName').focus(),100);
+  setTimeout(function () { const i = document.getElementById('pmP'); if (i) i.focus(); }, 100);
 }
 
-async function cfmSched(){
-  const name=document.getElementById('scName')?.value.trim();
-  const cmd=document.getElementById('scCmd')?.value.trim();
-  const int=document.getElementById('scInt')?.value||5;
-  if(!name||!cmd){nt('Name and command required','er');return}
+async function exPa(a) {
+  const p = (document.getElementById('pmP') || {}).value;
+  if (!p || !p.trim()) { nt('Enter player name', 'er'); return; }
   clMo();
-  const r=await $a('/schedules','POST',{name,command:cmd,interval_minutes:parseInt(int),enabled:true});
-  r?.success?(nt('Task created','ok'),lSched()):nt(r?.message||'Failed','er');
+  if (a === 'kick') { await pAct('kick', p.trim(), { reason: (document.getElementById('pmR') || {}).value || 'Kicked by admin' }); }
+  else if (a === 'ban') { await pAct('ban', p.trim(), { reason: (document.getElementById('pmR') || {}).value || 'Banned by admin' }); }
+  else if (a === 'unban') { await pAct('unban', p.trim()); }
+  else if (a === 'op') { await pAct('op', p.trim()); }
+  else if (a === 'deop') { await pAct('deop', p.trim()); }
+  else if (a === 'wl-add') { const r = await $a('/whitelist', 'POST', { action: 'add', player: p.trim() }); r && r.success ? nt(r.message, 'ok') : nt('Failed', 'er'); }
+  else if (a === 'wl-rm') { const r = await $a('/whitelist', 'POST', { action: 'remove', player: p.trim() }); r && r.success ? nt(r.message, 'ok') : nt('Failed', 'er'); }
+  else if (a === 'gm') { const m = (document.getElementById('pmM') || {}).value || 'survival'; const r = await $a('/gamemode', 'POST', { player: p.trim(), mode: m }); r && r.success ? nt(r.message, 'ok') : nt('Failed', 'er'); }
+  else if (a === 'tp') { const t = (document.getElementById('pmT') || {}).value; if (!t || !t.trim()) { nt('Enter target', 'er'); return; } const r = await $a('/tp', 'POST', { player: p.trim(), target: t.trim() }); r && r.success ? nt(r.message, 'ok') : nt('Failed', 'er'); }
 }
 
-async function togSched(name){
-  const r=await $a('/schedules/toggle','POST',{name});
-  r?.success?(nt('Toggled','ok'),lSched()):nt(r?.message||'Failed','er');
+function openSayModal() {
+  const box = document.getElementById('moBox');
+  box.innerHTML = '<h3>Broadcast Message</h3><p>Send a message to all players.</p><input class="mo-f" id="sayI" placeholder="Type message..."><div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="sendSay()">Send</button></div>';
+  document.getElementById('moBg').classList.add('on');
+  setTimeout(function () { document.getElementById('sayI').focus(); }, 100);
 }
 
-async function delSched(name){
-  if(!confirm('Delete task "'+name+'"?'))return;
-  const r=await $a('/schedules/delete','POST',{name});
-  r?.success?(nt('Deleted','ok'),lSched()):nt(r?.message||'Failed','er');
+async function sendSay() {
+  const m = (document.getElementById('sayI') || {}).value;
+  if (!m || !m.trim()) { nt('Enter a message', 'er'); return; }
+  clMo();
+  const r = await $a('/say', 'POST', { message: m.trim() });
+  r && r.success ? nt(r.message, 'ok') : nt('Failed', 'er');
 }
 
-/* ── logs viewer ── */
-async function fLogs(){
-  const search=document.getElementById('logSearch')?.value||'';
-  const lines=document.getElementById('logLines')?.value||'200';
-  const d=await $a(`/logs?search=${encodeURIComponent(search)}&lines=${lines}`);
-  if(!d)return;
-  const el=document.getElementById('logBody');
-  if(d.lines&&d.lines.length){
-    el.textContent=d.lines.join('\n');
-  }else{
-    el.textContent='No matching log entries found.';
+// ── Generic modal ──
+function openMo(t, v, a, x) {
+  const box = document.getElementById('moBox');
+  box.innerHTML = '<h3>' + escHtml(t) + '</h3><p>Enter a name below.</p><input class="mo-f" id="moI" placeholder="Enter name..." value="' + escHtml(v || '') + '" onkeydown="if(event.key===\'Enter\')cfmMo()"><div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="cfmMo()">Confirm</button></div>';
+  document.getElementById('moBg').classList.add('on');
+  moMeta = { a: a, x: x };
+  setTimeout(function () { document.getElementById('moI').focus(); }, 100);
+}
+
+function clMo() { document.getElementById('moBg').classList.remove('on'); }
+
+async function cfmMo() {
+  const v = (document.getElementById('moI') || {}).value;
+  if (!v || !v.trim()) return;
+  clMo();
+  if (moMeta.a === 'mkfile') {
+    const p = (cDir === '/' ? '' : cDir) + '/' + v.trim();
+    const r = await $a('/file/create', 'POST', { path: p, content: '' });
+    r && r.success ? (nt('Created', 'ok'), lDir(cDir)) : nt('Failed', 'er');
+  } else if (moMeta.a === 'mkdir') {
+    const p = (cDir === '/' ? '' : cDir) + '/' + v.trim();
+    const r = await $a('/file/mkdir', 'POST', { path: p });
+    r && r.success ? (nt('Created', 'ok'), lDir(cDir)) : nt('Failed', 'er');
+  } else if (moMeta.a === 'rename') {
+    const o = moMeta.x;
+    const d = o.substring(0, o.lastIndexOf('/'));
+    const r = await $a('/file/rename', 'POST', { old_path: o, new_path: d + '/' + v.trim() });
+    r && r.success ? (nt('Renamed', 'ok'), lDir(cDir)) : nt('Failed', 'er');
   }
-  document.getElementById('logCnt').textContent=`Showing ${d.total||0} line${(d.total||0)!==1?'s':''}${search?' matching "'+search+'"':''}`;
-  el.scrollTop=el.scrollHeight;
 }
 
-function toggleLogAuto(){
-  logAutoOn=!logAutoOn;
-  const btn=document.getElementById('logAutoBtn');
-  if(logAutoOn){btn.classList.add('btn-gn');logAutoI=setInterval(fLogs,5000);nt('Auto-refresh enabled','nf')}
-  else{btn.classList.remove('btn-gn');if(logAutoI){clearInterval(logAutoI);logAutoI=null}nt('Auto-refresh disabled','nf')}
-}
-
-/* ── server info ── */
-async function lInfo(){
-  const d=await $a('/server-info');if(!d)return;
-  document.getElementById('siVer').textContent=d.server_version||'Unknown';
-  document.getElementById('siPaper').textContent=d.paper_version||'Unknown';
-  document.getElementById('siAddr').textContent=d.ip+':'+d.port;
-  document.getElementById('siMax').textContent=d.max_players;
-  document.getElementById('siOnl').textContent=d.online_mode==='true'?'Enabled':'Disabled';
-  document.getElementById('siMotd').textContent=d.motd||'-';
-  document.getElementById('siVd').textContent=d.view_distance+' chunks';
-  document.getElementById('siWorld').textContent=d.world_sizes?.world||'N/A';
-  document.getElementById('siNether').textContent=d.world_sizes?.world_nether||'N/A';
-  document.getElementById('siEnd').textContent=d.world_sizes?.world_the_end||'N/A';
-  const plEl=document.getElementById('siPlugs');
-  if(d.plugins&&d.plugins.length){
-    plEl.innerHTML=d.plugins.map(p=>`<span class="plugin-tag"><i data-lucide="puzzle"></i>${p}</span>`).join('');
-    lucide.createIcons({nodes:[plEl]});
-  }else{
-    plEl.innerHTML='<span style="color:var(--tx3);font-size:12px">No plugins</span>';
+// ── Plugins ──
+async function lPlugins() {
+  const d = await $a('/plugins');
+  if (!d) return;
+  const tb = document.getElementById('plB');
+  let h = '';
+  (d.plugins || []).forEach(function (p) {
+    h += '<tr><td><div class="fn"><div class="fi jar"><i data-lucide="package"></i></div><span class="ftx">' + escHtml(p.name) + '</span></div></td><td class="fmeta fmh">' + escHtml(p.size_formatted || '') + '</td><td class="fmeta fmh">' + escHtml(p.modified || '') + '</td><td><div class="fact"><button class="btn btn-xs btn-rd" onclick="event.stopPropagation();delPlugin(\'' + escHtml(p.name).replace(/'/g, "\\'") + '\')" title="Delete"><i data-lucide="trash-2"></i></button></div></td></tr>';
+  });
+  if (!d.plugins || !d.plugins.length) {
+    h += '<tr><td colspan="4"><div class="empty"><i data-lucide="package-open"></i><p>No plugins installed</p></div></td></tr>';
   }
-  document.getElementById('siPlCnt').textContent=(d.plugin_count||0)+' plugin'+((d.plugin_count||0)!==1?'s':'');
+  tb.innerHTML = h;
+  document.getElementById('plCnt').textContent = (d.plugins ? d.plugins.length : 0) + ' plugin' + ((d.plugins && d.plugins.length !== 1) ? 's' : '');
+  lucide.createIcons();
+}
+
+async function delPlugin(name) {
+  if (!confirm('Delete plugin "' + name + '"?\nServer restart required for changes.')) return;
+  const r = await $a('/plugins/delete', 'POST', { name: name });
+  r && r.success ? (nt('Plugin deleted', 'ok'), lPlugins()) : nt((r && r.message) || 'Failed', 'er');
+}
+
+async function upPlugin(inp) {
+  if (!inp.files.length) return;
+  for (let i = 0; i < inp.files.length; i++) {
+    const f = inp.files[i];
+    if (!f.name.endsWith('.jar')) { nt('Only .jar files allowed', 'er'); continue; }
+    nt('Uploading ' + f.name + '...', 'nf');
+    const fd = new FormData();
+    fd.append('file', f);
+    fd.append('path', '/plugins');
+    try {
+      const r = await $upload('/file/upload', fd);
+      const d = await r.json();
+      d.success ? nt(d.message, 'ok') : nt(d.message || 'Failed', 'er');
+    } catch (e) { nt('Upload failed', 'er'); }
+  }
+  inp.value = '';
+  lPlugins();
+}
+
+// ── Marketplace ──
+async function mkSearch() {
+  const q = (document.getElementById('mkQuery') || {}).value;
+  if (!q || !q.trim()) { nt('Enter a search query', 'er'); return; }
+  const container = document.getElementById('mkResults');
+  container.innerHTML = '<div class="empty"><div class="spin spin-lg"></div><p style="margin-top:12px">Searching...</p></div>';
+  const d = await $a('/marketplace/search?query=' + encodeURIComponent(q.trim()));
+  if (!d || !d.results) {
+    container.innerHTML = '<div class="empty"><i data-lucide="search-x"></i><p>No results found</p></div>';
+    lucide.createIcons();
+    return;
+  }
+  renderMkResults(d.results, container);
+}
+
+async function mkFeatured() {
+  const container = document.getElementById('mkResults');
+  container.innerHTML = '<div class="empty"><div class="spin spin-lg"></div><p style="margin-top:12px">Loading featured plugins...</p></div>';
+  const d = await $a('/marketplace/featured');
+  if (!d || !d.results) {
+    container.innerHTML = '<div class="empty"><i data-lucide="package-search"></i><p>Search for plugins or browse featured</p></div>';
+    lucide.createIcons();
+    return;
+  }
+  let html = '<div class="mk-featured-title">Featured Plugins</div>';
+  html += '<div class="mk-grid" id="mkGrid"></div>';
+  container.innerHTML = html;
+  renderMkResults(d.results, document.getElementById('mkGrid'));
+}
+
+function renderMkResults(results, container) {
+  if (!results || !results.length) {
+    container.innerHTML = '<div class="empty"><i data-lucide="search-x"></i><p>No plugins found</p></div>';
+    lucide.createIcons();
+    return;
+  }
+  let h = '';
+  results.forEach(function (p) {
+    h += '<div class="mk-card">';
+    h += '<div class="mk-card-top">';
+    h += '<div class="mk-card-icon">';
+    if (p.icon_url) {
+      h += '<img src="' + escHtml(p.icon_url) + '" onerror="this.style.display=\'none\'">';
+    } else {
+      h += '<i data-lucide="package"></i>';
+    }
+    h += '</div>';
+    h += '<div><div class="mk-card-title">' + escHtml(p.title || p.name) + '</div>';
+    h += '<div class="mk-card-author">by ' + escHtml(p.author || 'Unknown') + '</div></div>';
+    h += '</div>';
+    h += '<div class="mk-card-desc">' + escHtml(p.description || '') + '</div>';
+    h += '<div class="mk-card-stats">';
+    if (p.downloads) h += '<span><i data-lucide="download"></i>' + formatNum(p.downloads) + '</span>';
+    if (p.follows) h += '<span><i data-lucide="heart"></i>' + formatNum(p.follows) + '</span>';
+    if (p.updated) h += '<span><i data-lucide="clock"></i>' + escHtml(p.updated) + '</span>';
+    h += '</div>';
+    h += '<div class="mk-card-actions">';
+    h += '<button class="btn btn-xs btn-ac" onclick="installMkPlugin(\'' + escHtml(p.slug || p.name || '').replace(/'/g, "\\'") + '\',\'' + escHtml(p.title || p.name || '').replace(/'/g, "\\'") + '\')"><i data-lucide="download"></i>Install</button>';
+    if (p.page_url) h += '<a class="btn btn-xs btn-gh" href="' + escHtml(p.page_url) + '" target="_blank"><i data-lucide="external-link"></i></a>';
+    h += '</div>';
+    h += '</div>';
+  });
+  container.innerHTML = h;
+  lucide.createIcons();
+}
+
+async function installMkPlugin(slug, title) {
+  nt('Installing ' + title + '...', 'nf');
+  const r = await $a('/marketplace/install', 'POST', { slug: slug });
+  r && r.success ? nt(r.message || 'Plugin installed', 'ok') : nt((r && r.message) || 'Failed', 'er');
+}
+
+function formatNum(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return String(n);
+}
+
+// ── Schedules ──
+async function lSched() {
+  const d = await $a('/schedules');
+  if (!d) return;
+  const tb = document.getElementById('scB');
+  let h = '';
+  (d.schedules || []).forEach(function (s) {
+    const en = s.enabled;
+    const min = s.interval_minutes || Math.round(s.interval_seconds / 60);
+    h += '<tr><td><span class="ftx">' + escHtml(s.name) + '</span></td><td class="fmeta" style="font-size:11px">' + escHtml(s.command) + '</td><td class="fmeta fmh">' + min + 'm</td><td><button class="tog ' + (en ? 'on' : '') + '" onclick="togSched(\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')"></button></td><td class="fmeta fmh">' + escHtml(s.last_run || 'Never') + '</td><td><div class="fact"><button class="btn btn-xs btn-rd" onclick="event.stopPropagation();delSched(\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')" title="Delete"><i data-lucide="trash-2"></i></button></div></td></tr>';
+  });
+  if (!d.schedules || !d.schedules.length) {
+    h += '<tr><td colspan="6"><div class="empty"><i data-lucide="calendar-clock"></i><p>No scheduled tasks</p></div></td></tr>';
+  }
+  tb.innerHTML = h;
+  document.getElementById('scCnt').textContent = (d.schedules ? d.schedules.length : 0) + ' task' + ((d.schedules && d.schedules.length !== 1) ? 's' : '');
+  lucide.createIcons();
+}
+
+function openSchedModal() {
+  const box = document.getElementById('moBox');
+  box.innerHTML = '<h3>Add Scheduled Task</h3><p>Create a new task that runs commands automatically.</p><input class="mo-f" id="scName" placeholder="Task name..." style="font-size:12px"><input class="mo-f" id="scCmd" placeholder="Server command (e.g. say Hello)" style="font-size:12px"><input class="mo-f" id="scInt" type="number" min="1" value="5" placeholder="Interval in minutes" style="font-size:12px"><div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="cfmSched()">Create</button></div>';
+  document.getElementById('moBg').classList.add('on');
+  setTimeout(function () { document.getElementById('scName').focus(); }, 100);
+}
+
+async function cfmSched() {
+  const name = (document.getElementById('scName') || {}).value;
+  const cmd = (document.getElementById('scCmd') || {}).value;
+  const intv = (document.getElementById('scInt') || {}).value || 5;
+  if (!name || !name.trim() || !cmd || !cmd.trim()) { nt('Name and command required', 'er'); return; }
+  clMo();
+  const r = await $a('/schedules', 'POST', { name: name.trim(), command: cmd.trim(), interval_minutes: parseInt(intv), enabled: true });
+  r && r.success ? (nt('Task created', 'ok'), lSched()) : nt((r && r.message) || 'Failed', 'er');
+}
+
+async function togSched(name) {
+  const r = await $a('/schedules/toggle', 'POST', { name: name });
+  r && r.success ? (nt('Toggled', 'ok'), lSched()) : nt((r && r.message) || 'Failed', 'er');
+}
+
+async function delSched(name) {
+  if (!confirm('Delete task "' + name + '"?')) return;
+  const r = await $a('/schedules/delete', 'POST', { name: name });
+  r && r.success ? (nt('Deleted', 'ok'), lSched()) : nt((r && r.message) || 'Failed', 'er');
+}
+
+// ── Logs viewer ──
+async function fLogs() {
+  const search = (document.getElementById('logSearch') || {}).value || '';
+  const lines = (document.getElementById('logLines') || {}).value || '200';
+  const d = await $a('/logs?search=' + encodeURIComponent(search) + '&lines=' + lines);
+  if (!d) return;
+  const el = document.getElementById('logBody');
+  if (d.lines && d.lines.length) {
+    el.textContent = d.lines.join('\n');
+  } else {
+    el.textContent = 'No matching log entries found.';
+  }
+  document.getElementById('logCnt').textContent = 'Showing ' + (d.total || 0) + ' line' + ((d.total || 0) !== 1 ? 's' : '') + (search ? ' matching "' + search + '"' : '');
+  el.scrollTop = el.scrollHeight;
+}
+
+function toggleLogAuto() {
+  logAutoOn = !logAutoOn;
+  const btn = document.getElementById('logAutoBtn');
+  if (logAutoOn) { btn.classList.add('btn-gn'); logAutoI = setInterval(fLogs, 5000); nt('Auto-refresh enabled', 'nf'); }
+  else { btn.classList.remove('btn-gn'); if (logAutoI) { clearInterval(logAutoI); logAutoI = null; } nt('Auto-refresh disabled', 'nf'); }
+}
+
+// ── Server Info ──
+async function lInfo() {
+  const d = await $a('/server-info');
+  if (!d) return;
+  document.getElementById('siVer').textContent = d.server_version || 'Unknown';
+  document.getElementById('siPaper').textContent = d.paper_version || 'Unknown';
+  document.getElementById('siAddr').textContent = d.ip + ':' + d.port;
+  document.getElementById('siMax').textContent = d.max_players;
+  document.getElementById('siOnl').textContent = d.online_mode === 'true' ? 'Enabled' : 'Disabled';
+  document.getElementById('siMotd').textContent = d.motd || '-';
+  document.getElementById('siVd').textContent = d.view_distance + ' chunks';
+  document.getElementById('siWorld').textContent = (d.world_sizes && d.world_sizes.world) || 'N/A';
+  document.getElementById('siNether').textContent = (d.world_sizes && d.world_sizes.world_nether) || 'N/A';
+  document.getElementById('siEnd').textContent = (d.world_sizes && d.world_sizes.world_the_end) || 'N/A';
+  const plEl = document.getElementById('siPlugs');
+  if (d.plugins && d.plugins.length) {
+    plEl.innerHTML = d.plugins.map(function (p) { return '<span class="plugin-tag"><i data-lucide="puzzle"></i>' + escHtml(p) + '</span>'; }).join('');
+    lucide.createIcons({ nodes: [plEl] });
+  } else {
+    plEl.innerHTML = '<span style="color:var(--tx3);font-size:12px">No plugins</span>';
+  }
+  document.getElementById('siPlCnt').textContent = (d.plugin_count || 0) + ' plugin' + ((d.plugin_count || 0) !== 1 ? 's' : '');
+}
+
+// ── Backup Manager ──
+async function lBackups() {
+  const el = document.getElementById('bkList');
+  if (!el) return;
+  try {
+    const d = await $a('/backups');
+    if (!d || !d.backups || !d.backups.length) {
+      el.innerHTML = '<div class="empty"><i data-lucide="archive"></i><p>No backups found</p></div>';
+      lucide.createIcons();
+      return;
+    }
+    let h = '';
+    d.backups.forEach(function (b) {
+      h += '<div class="bk-item">';
+      h += '<div><div class="bk-name"><i data-lucide="archive"></i>' + escHtml(b.name || b.filename) + '</div>';
+      h += '<div class="bk-meta">' + escHtml(b.size || '') + (b.date ? ' &middot; ' + escHtml(b.date) : '') + '</div></div>';
+      h += '<div class="bk-actions">';
+      if (b.download_url) h += '<button class="btn btn-xs" onclick="window.open(\'' + escHtml(b.download_url) + '\')"><i data-lucide="download"></i></button>';
+      h += '</div></div>';
+    });
+    el.innerHTML = h;
+    lucide.createIcons();
+  } catch (e) {
+    el.innerHTML = '<div class="empty"><i data-lucide="archive"></i><p>Could not load backups</p></div>';
+    lucide.createIcons();
+  }
+}
+
+async function backupToHF() {
+  nt('Creating backup and uploading to HuggingFace...', 'nf');
+  const r = await $a('/backup', 'POST', { destination: 'huggingface' });
+  r && r.success ? (nt(r.message || 'Backup uploaded', 'ok'), lBackups()) : nt((r && r.message) || 'Failed', 'er');
+}
+
+// ── User Management ──
+async function lUsers() {
+  if (!isAdmin()) { nt('Access denied', 'er'); return; }
+  const d = await $a('/users');
+  if (!d) return;
+  const tb = document.getElementById('usrB');
+  const users = d.users || [];
+  let h = '';
+  if (!users.length) {
+    h = '<tr><td colspan="5"><div class="empty"><i data-lucide="users"></i><p>No users found</p></div></td></tr>';
+  } else {
+    users.forEach(function (u) {
+      const roleCls = 'role-' + (u.role || 'viewer');
+      const isSelf = currentUser && u.username === currentUser.username;
+      h += '<tr>';
+      h += '<td><span class="ftx">' + escHtml(u.username) + (isSelf ? ' (you)' : '') + '</span></td>';
+      h += '<td><span class="role-badge ' + roleCls + '">' + escHtml(u.role || 'viewer') + '</span></td>';
+      h += '<td class="fmeta fmh">' + escHtml(u.created_at || '-') + '</td>';
+      h += '<td class="fmeta fmh">' + escHtml(u.last_login || '-') + '</td>';
+      h += '<td><div class="fact" style="opacity:1;display:flex;gap:4px">';
+      if (!isSelf) {
+        h += '<button class="btn btn-xs btn-gh" onclick="changeUserRole(\'' + escHtml(u.username).replace(/'/g, "\\'") + '\',\'' + escHtml(u.role || 'viewer').replace(/'/g, "\\'") + '\')"><i data-lucide="shield"></i>Role</button>';
+        h += '<button class="btn btn-xs btn-rd" onclick="deleteUser(\'' + escHtml(u.username).replace(/'/g, "\\'") + '\')"><i data-lucide="trash-2"></i></button>';
+      }
+      h += '</div></td></tr>';
+    });
+  }
+  tb.innerHTML = h;
+  document.getElementById('usrCnt').textContent = users.length + ' user' + (users.length !== 1 ? 's' : '');
+  lucide.createIcons();
+}
+
+function openAddUserModal() {
+  const box = document.getElementById('moBox');
+  box.innerHTML = '<h3>Add User</h3><p>Create a new panel user account.</p>' +
+    '<input class="mo-f" id="auUser" placeholder="Username..." style="font-size:12px">' +
+    '<input class="mo-f" id="auPass" type="password" placeholder="Password..." style="font-size:12px">' +
+    '<select class="mo-sel" id="auRole"><option value="viewer">Viewer</option><option value="mod">Moderator</option><option value="admin">Admin</option></select>' +
+    '<div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="cfmAddUser()">Create User</button></div>';
+  document.getElementById('moBg').classList.add('on');
+  setTimeout(function () { document.getElementById('auUser').focus(); }, 100);
+}
+
+async function cfmAddUser() {
+  const username = (document.getElementById('auUser') || {}).value;
+  const password = (document.getElementById('auPass') || {}).value;
+  const role = (document.getElementById('auRole') || {}).value || 'viewer';
+  if (!username || !username.trim() || !password) { nt('Username and password required', 'er'); return; }
+  clMo();
+  const r = await $a('/users', 'POST', { username: username.trim(), password: password, role: role });
+  r && r.success ? (nt('User created', 'ok'), lUsers()) : nt((r && r.message) || 'Failed', 'er');
+}
+
+function changeUserRole(username, currentRole) {
+  const box = document.getElementById('moBox');
+  box.innerHTML = '<h3>Change Role</h3><p>Change role for <strong>' + escHtml(username) + '</strong>.</p>' +
+    '<select class="mo-sel" id="crRole"><option value="viewer"' + (currentRole === 'viewer' ? ' selected' : '') + '>Viewer</option>' +
+    '<option value="mod"' + (currentRole === 'mod' ? ' selected' : '') + '>Moderator</option>' +
+    '<option value="admin"' + (currentRole === 'admin' ? ' selected' : '') + '>Admin</option></select>' +
+    '<div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="cfmChangeRole(\'' + escHtml(username).replace(/'/g, "\\'") + '\')">Update</button></div>';
+  document.getElementById('moBg').classList.add('on');
+}
+
+async function cfmChangeRole(username) {
+  const role = (document.getElementById('crRole') || {}).value || 'viewer';
+  clMo();
+  const r = await $a('/users/' + encodeURIComponent(username) + '/role', 'PUT', { role: role });
+  r && r.success ? (nt('Role updated', 'ok'), lUsers()) : nt((r && r.message) || 'Failed', 'er');
+}
+
+async function deleteUser(username) {
+  if (!confirm('Delete user "' + username + '"? This cannot be undone.')) return;
+  const r = await $a('/users/' + encodeURIComponent(username), 'DELETE');
+  r && r.success ? (nt('User deleted', 'ok'), lUsers()) : nt((r && r.message) || 'Failed', 'er');
+}
+
+// ── Audit Log ──
+async function lAudit() {
+  if (!isAdmin()) { nt('Access denied', 'er'); return; }
+  const d = await $a('/audit-log');
+  if (!d) return;
+  const el = document.getElementById('auditBody');
+  const entries = d.entries || d.logs || [];
+  if (!entries.length) {
+    el.innerHTML = '<div class="empty"><i data-lucide="file-search"></i><p>No audit entries found</p></div>';
+    lucide.createIcons();
+    return;
+  }
+  let h = '';
+  entries.forEach(function (e) {
+    const action = e.action || e.type || 'unknown';
+    let iconCls = 'bl';
+    let iconName = 'info';
+    if (action.indexOf('delete') !== -1 || action.indexOf('remove') !== -1 || action.indexOf('ban') !== -1) { iconCls = 'rd'; iconName = 'trash-2'; }
+    else if (action.indexOf('create') !== -1 || action.indexOf('add') !== -1 || action.indexOf('start') !== -1) { iconCls = 'gn'; iconName = 'plus'; }
+    else if (action.indexOf('update') !== -1 || action.indexOf('edit') !== -1 || action.indexOf('change') !== -1) { iconCls = 'am'; iconName = 'pencil'; }
+    h += '<div class="audit-item">';
+    h += '<div class="audit-icon st-ic ' + iconCls + '"><i data-lucide="' + iconName + '"></i></div>';
+    h += '<div class="audit-text"><strong>' + escHtml(e.user || e.username || 'System') + '</strong> ' + escHtml(e.description || e.message || action);
+    if (e.details) h += '<br><span style="font-size:10px;color:var(--tx3)">' + escHtml(e.details) + '</span>';
+    h += '</div>';
+    h += '<div class="audit-time">' + escHtml(e.timestamp || e.created_at || '') + '</div>';
+    h += '</div>';
+  });
+  el.innerHTML = h;
+  lucide.createIcons();
+}
+
+// ── Create Server Modal ──
+function openCreateServerModal() {
+  if (!isAdmin()) { nt('Access denied', 'er'); return; }
+  const box = document.getElementById('moBox');
+  box.innerHTML = '<h3>Create Server</h3><p>Set up a new Minecraft server instance.</p>' +
+    '<input class="mo-f" id="csName" placeholder="Server Name" style="font-size:12px">' +
+    '<input class="mo-f" id="csPort" type="number" value="25565" placeholder="Port" style="font-size:12px">' +
+    '<input class="mo-f" id="csRamMin" placeholder="RAM Min (e.g. 2G)" value="2G" style="font-size:12px">' +
+    '<input class="mo-f" id="csRamMax" placeholder="RAM Max (e.g. 6G)" value="6G" style="font-size:12px">' +
+    '<input class="mo-f" id="csVer" placeholder="Minecraft Version" value="1.20.4" style="font-size:12px">' +
+    '<div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="cfmCreateServer()">Create Server</button></div>';
+  document.getElementById('moBg').classList.add('on');
+  setTimeout(function () { document.getElementById('csName').focus(); }, 100);
+}
+
+async function cfmCreateServer() {
+  const name = (document.getElementById('csName') || {}).value;
+  const port = (document.getElementById('csPort') || {}).value || 25565;
+  const ramMin = (document.getElementById('csRamMin') || {}).value || '2G';
+  const ramMax = (document.getElementById('csRamMax') || {}).value || '6G';
+  const version = (document.getElementById('csVer') || {}).value || '1.20.4';
+  if (!name || !name.trim()) { nt('Server name is required', 'er'); return; }
+  clMo();
+  const r = await $a('/servers', 'POST', {
+    name: name.trim(),
+    port: parseInt(port),
+    ram_min: ramMin,
+    ram_max: ramMax,
+    version: version
+  });
+  r && r.success ? (nt('Server created', 'ok'), fetchServers()) : nt((r && r.message) || 'Failed', 'er');
+}
+
+// ── Server Settings Modal ──
+function openServerSettings() {
+  if (!isAdmin()) return;
+  const box = document.getElementById('moBox');
+  box.innerHTML = '<h3>Server Settings</h3><p>Configure server instance parameters.</p>' +
+    '<label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">Port</label>' +
+    '<input class="mo-f" id="ssPort" type="number" value="25565" style="font-size:12px">' +
+    '<label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">RAM Minimum</label>' +
+    '<input class="mo-f" id="ssRamMin" placeholder="e.g. 2G" value="2G" style="font-size:12px">' +
+    '<label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">RAM Maximum</label>' +
+    '<input class="mo-f" id="ssRamMax" placeholder="e.g. 6G" value="6G" style="font-size:12px">' +
+    '<label style="font-size:11px;color:var(--tx3);display:block;margin-bottom:4px">JAR Name</label>' +
+    '<input class="mo-f" id="ssJar" placeholder="server.jar" style="font-size:12px">' +
+    '<div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="cfmServerSettings()">Save Settings</button></div>';
+  document.getElementById('moBg').classList.add('on');
+  // Load current settings
+  $a('/settings').then(function (d) {
+    if (d) {
+      const p = document.getElementById('ssPort'); if (p && d.port) p.value = d.port;
+      const rm = document.getElementById('ssRamMin'); if (rm && d.ram_min) rm.value = d.ram_min;
+      const rx = document.getElementById('ssRamMax'); if (rx && d.ram_max) rx.value = d.ram_max;
+      const j = document.getElementById('ssJar'); if (j && d.jar_name) j.value = d.jar_name;
+    }
+  });
+}
+
+async function cfmServerSettings() {
+  const port = (document.getElementById('ssPort') || {}).value;
+  const ramMin = (document.getElementById('ssRamMin') || {}).value;
+  const ramMax = (document.getElementById('ssRamMax') || {}).value;
+  const jarName = (document.getElementById('ssJar') || {}).value;
+  clMo();
+  const body = {};
+  if (port) body.port = parseInt(port);
+  if (ramMin) body.ram_min = ramMin;
+  if (ramMax) body.ram_max = ramMax;
+  if (jarName) body.jar_name = jarName;
+  const r = await $a('/settings', 'PUT', body);
+  r && r.success ? nt('Settings saved', 'ok') : nt((r && r.message) || 'Failed', 'er');
+}
+
+// ── Keyboard shortcuts ──
+document.addEventListener('keydown', function (e) {
+  // Escape closes modal
+  if (e.key === 'Escape') {
+    const moBg = document.getElementById('moBg');
+    if (moBg && moBg.classList.contains('on')) clMo();
+  }
+});
+
+// ── Service Worker registration ──
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(function () {
+    // Service worker not available, that's fine
+  });
 }
 </script>
 </body>
