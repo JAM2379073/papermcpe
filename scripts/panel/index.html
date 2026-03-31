@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>MCPanel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+--bg0:#09090b;--bg1:#0c0c0f;--bg2:#111114;--bg3:#161619;--bg4:#1c1c20;--bg5:#222228;--bgH:#28282f;
+--bd:#1e1e24;--bdH:#2a2a32;--bdA:#38383f;
+--tx:#ececef;--tx2:#9898a0;--tx3:#5c5c66;--tx4:#3c3c44;
+--ac:#6366f1;--acH:#818cf8;--acM:rgba(99,102,241,.12);
+--gn:#10b981;--gnM:rgba(16,185,129,.12);
+--rd:#ef4444;--rdM:rgba(239,68,68,.12);
+--am:#f59e0b;--amM:rgba(245,158,11,.12);
+--cy:#06b6d4;--cyM:rgba(6,182,212,.12);
+--pr:#a855f7;--prM:rgba(168,85,247,.12);
+--sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+--mono:'JetBrains Mono','Fira Code',monospace;
+--r:8px;--rl:12px;--rxl:16px
+}
+html{font-size:14px;-webkit-text-size-adjust:100%}
+body{font-family:var(--sans);background:var(--bg0);color:var(--tx);min-height:100dvh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+
+/* kill tap highlight */
+*{-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+button,input,textarea,select{-webkit-appearance:none;-moz-appearance:none;appearance:none}
+input:focus,textarea:focus,select:focus,button:focus{outline:none}
+
+/* ── layout ── */
+.shell{display:flex;min-height:100dvh}
+
+/* ── sidebar ── */
+.sb{width:220px;flex-shrink:0;background:var(--bg1);border-right:1px solid var(--bd);display:flex;flex-direction:column;position:fixed;inset:0 auto 0 0;z-index:100;transition:transform .25s cubic-bezier(.4,0,.2,1)}
+.sb-logo{padding:18px 16px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px}
+.sb-logo-ic{width:32px;height:32px;background:var(--acM);border-radius:var(--r);display:grid;place-items:center;flex-shrink:0}
+.sb-logo-ic i{width:17px;height:17px;color:var(--ac)}
+.sb-logo-tx{font-size:14px;font-weight:700;letter-spacing:-.4px}
+.sb-logo-sub{font-size:10px;color:var(--tx3);margin-top:1px}
+.sb-nav{flex:1;padding:10px 6px;overflow-y:auto;display:flex;flex-direction:column;gap:1px}
+.sb-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--tx4);padding:14px 10px 5px}
+.sb-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:6px;font-size:12.5px;font-weight:500;color:var(--tx2);cursor:pointer;transition:all .12s;border:none;background:none;width:100%;text-align:left;font-family:inherit}
+.sb-item:hover{background:var(--bgH);color:var(--tx)}
+.sb-item.on{background:var(--acM);color:var(--acH)}
+.sb-item i{width:16px;height:16px;flex-shrink:0;opacity:.65}
+.sb-item.on i{opacity:1;color:var(--ac)}
+.sb-foot{padding:12px;border-top:1px solid var(--bd)}
+.sb-pill{display:flex;align-items:center;gap:7px;padding:9px 10px;border-radius:6px;background:var(--bg4);border:1px solid var(--bd)}
+.sb-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.sb-dot.on{background:var(--gn);box-shadow:0 0 6px var(--gn)}
+.sb-dot.off{background:var(--rd);box-shadow:0 0 6px var(--rd)}
+.sb-stx{font-size:11px;font-weight:600}
+.sb-stx.on{color:var(--gn)}.sb-stx.off{color:var(--rd)}
+.sb-extra{font-size:10px;color:var(--tx3);margin-top:4px}
+
+/* ── main ── */
+.mn{flex:1;margin-left:220px;display:flex;flex-direction:column;min-height:100dvh}
+
+/* ── header ── */
+.hd{height:52px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:var(--bg1);position:sticky;top:0;z-index:50;flex-shrink:0}
+.hd-left{display:flex;align-items:center;gap:12px}
+.burger{display:none;background:none;border:none;color:var(--tx2);cursor:pointer;padding:4px;border-radius:6px}
+.burger:hover{background:var(--bgH)}
+.burger i{width:18px;height:18px}
+.hd-title{font-size:13px;font-weight:600}
+.hd-right{display:flex;gap:6px;align-items:center}
+
+/* ── button ── */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;font-size:12px;font-weight:550;font-family:inherit;border:1px solid var(--bdH);border-radius:6px;cursor:pointer;transition:all .12s;background:var(--bg5);color:var(--tx);white-space:nowrap;line-height:1.4;user-select:none}
+.btn i{width:13px;height:13px}
+.btn:hover{background:var(--bgH);border-color:var(--bdA)}
+.btn:active{transform:scale(.97)}
+.btn-ac{background:var(--ac);border-color:var(--ac);color:#fff}
+.btn-ac:hover{background:var(--acH);border-color:var(--acH)}
+.btn-gn{background:var(--gn);border-color:var(--gn);color:#fff}
+.btn-gn:hover{background:#059669}
+.btn-rd{background:var(--rd);border-color:var(--rd);color:#fff}
+.btn-rd:hover{background:#dc2626}
+.btn-am{background:var(--am);border-color:var(--am);color:#000}
+.btn-am:hover{background:#d97706}
+.btn-gh{background:transparent;border-color:transparent}
+.btn-gh:hover{background:var(--bgH);border-color:var(--bd)}
+.btn-xs{padding:4px 8px;font-size:11px}
+.btn-xs i{width:12px;height:12px}
+.btn-ic{padding:6px;border-color:transparent;background:transparent}
+.btn-ic:hover{background:var(--bgH)}
+
+/* ── page ── */
+.pg{flex:1;padding:20px;overflow-y:auto}
+.vw{display:none}.vw.on{display:block}
+
+/* ── grid ── */
+.g{display:grid;gap:10px;margin-bottom:16px}
+.g6{grid-template-columns:repeat(6,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g2{grid-template-columns:repeat(2,1fr)}
+
+/* ── stat ── */
+.st{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--rl);padding:16px;transition:border-color .15s}
+.st:hover{border-color:var(--bdH)}
+.st-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.st-lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--tx3)}
+.st-ic{width:28px;height:28px;border-radius:6px;display:grid;place-items:center}
+.st-ic i{width:14px;height:14px}
+.st-ic.bl{background:var(--acM);color:var(--ac)}
+.st-ic.gn{background:var(--gnM);color:var(--gn)}
+.st-ic.rd{background:var(--rdM);color:var(--rd)}
+.st-ic.am{background:var(--amM);color:var(--am)}
+.st-ic.cy{background:var(--cyM);color:var(--cy)}
+.st-ic.pr{background:var(--prM);color:var(--pr)}
+.st-val{font-size:20px;font-weight:800;letter-spacing:-.6px;line-height:1.2}
+.st-hint{font-size:10px;color:var(--tx3);margin-top:2px}
+.bar{height:3px;background:var(--bg5);border-radius:2px;margin-top:10px;overflow:hidden}
+.bar-f{height:100%;border-radius:2px;transition:width .5s ease}
+
+/* ── controls ── */
+.ctrls{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+
+/* ── card ── */
+.cd{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--rl);overflow:hidden}
+.cd-h{padding:12px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg3)}
+.cd-hl{font-size:12px;font-weight:600;color:var(--tx2);display:flex;align-items:center;gap:6px}
+.cd-hl i{width:14px;height:14px;color:var(--tx3)}
+
+/* ── console ── */
+.tm{background:var(--bg0);border:1px solid var(--bd);border-radius:var(--rl);overflow:hidden;display:flex;flex-direction:column;height:calc(100dvh - 140px)}
+.tm-bar{padding:8px 12px;display:flex;align-items:center;justify-content:space-between;background:var(--bg3);border-bottom:1px solid var(--bd);flex-shrink:0}
+.tm-dots{display:flex;gap:5px}
+.tm-d{width:9px;height:9px;border-radius:50%}
+.tm-dr{background:#ff5f57}.tm-dy{background:#febc2e}.tm-dg{background:#28c840}
+.tm-lbl{font-size:11px;font-weight:600;color:var(--tx3);margin-left:10px}
+.tm-body{flex:1;overflow-y:auto;padding:14px;font-family:var(--mono);font-size:11.5px;line-height:1.75;white-space:pre-wrap;word-break:break-all;color:var(--tx2)}
+.tm-ibar{display:flex;align-items:center;border-top:1px solid var(--bd);background:var(--bg1);flex-shrink:0}
+.tm-prompt{padding:0 10px 0 14px;font-family:var(--mono);font-size:12px;color:var(--gn);user-select:none}
+.tm-in{flex:1;padding:11px 14px 11px 0;background:transparent;border:none;outline:none;color:var(--tx);font-family:var(--mono);font-size:12px}
+.tm-in::placeholder{color:var(--tx4)}
+
+/* ── file manager ── */
+.fm-bar{display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
+.crumbs{flex:1;min-width:0;display:flex;align-items:center;gap:2px;background:var(--bg2);border:1px solid var(--bd);padding:6px 10px;border-radius:6px;overflow-x:auto;font-size:12px;scrollbar-width:none}
+.crumbs::-webkit-scrollbar{display:none}
+.crumb{color:var(--ac);cursor:pointer;padding:2px 4px;border-radius:4px;white-space:nowrap;font-weight:500}
+.crumb:hover{background:var(--acM)}
+.crumb-s{color:var(--tx4);font-size:10px;padding:0 1px}
+.ft{width:100%;border-collapse:collapse}
+.ft thead th{padding:9px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--tx4);text-align:left;background:var(--bg3);border-bottom:1px solid var(--bd);position:sticky;top:0}
+.ft tbody tr{border-bottom:1px solid var(--bd);cursor:pointer;transition:background .1s}
+.ft tbody tr:last-child{border-bottom:none}
+.ft tbody tr:hover{background:var(--bgH)}
+.ft td{padding:8px 14px;font-size:12px;vertical-align:middle}
+.fn{display:flex;align-items:center;gap:9px}
+.fi{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;flex-shrink:0}
+.fi i{width:13px;height:13px}
+.fi.dir{background:var(--amM);color:var(--am)}
+.fi.cfg{background:var(--prM);color:var(--pr)}
+.fi.log{background:var(--gnM);color:var(--gn)}
+.fi.jar{background:var(--rdM);color:var(--rd)}
+.fi.code{background:var(--cyM);color:var(--cy)}
+.fi.gen{background:var(--acM);color:var(--ac)}
+.ftx{font-weight:500;color:var(--tx)}
+.fmeta{color:var(--tx4);font-family:var(--mono);font-size:11px}
+.fact{display:flex;gap:2px;opacity:0;transition:opacity .12s}
+.ft tbody tr:hover .fact{opacity:1}
+
+/* ── editor ── */
+.ed{display:none;margin-top:14px}.ed.on{display:block}
+.ed-h{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg3);border:1px solid var(--bd);border-bottom:none;border-radius:var(--r) var(--r) 0 0}
+.ed-file{font-family:var(--mono);font-size:11px;color:var(--tx2);display:flex;align-items:center;gap:6px}
+.ed-file i{width:13px;height:13px;color:var(--tx3)}
+.ed-area{width:100%;min-height:380px;background:var(--bg0);border:1px solid var(--bd);border-top:none;border-radius:0 0 var(--r) var(--r);color:var(--tx);font-family:var(--mono);font-size:12px;line-height:1.65;padding:14px;resize:vertical;outline:none;tab-size:2}
+.ed-area:focus{border-color:var(--ac)}
+
+/* ── properties ── */
+.pt{width:100%;border-collapse:collapse}
+.pt tr{border-bottom:1px solid var(--bd)}
+.pt tr:last-child{border-bottom:none}
+.pt td{padding:9px 14px;vertical-align:middle}
+.pk{font-family:var(--mono);font-size:11px;color:var(--ac);font-weight:600;width:260px;white-space:nowrap}
+.pi{width:100%;padding:6px 10px;background:var(--bg4);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-family:var(--mono);font-size:11.5px;outline:none;transition:border-color .15s}
+.pi:focus{border-color:var(--ac)}
+
+/* ── players ── */
+.pg2{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.pc{background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r);padding:14px;display:flex;align-items:center;gap:12px;transition:border-color .15s}
+.pc:hover{border-color:var(--bdH)}
+.pa{width:38px;height:38px;border-radius:var(--r);background:var(--acM);display:grid;place-items:center;flex-shrink:0}
+.pa i{width:18px;height:18px;color:var(--ac)}
+.pn{font-size:13px;font-weight:600}
+.po{font-size:11px;color:var(--gn);display:flex;align-items:center;gap:4px;margin-top:2px}
+.po-d{width:5px;height:5px;border-radius:50%;background:var(--gn)}
+.pmr{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--bg4);border-radius:6px;font-size:12px}
+.pmr .pn{font-size:12px}
+.pmi{font-size:10px;color:var(--tx3);font-family:var(--mono)}
+.empty{text-align:center;padding:40px 20px;color:var(--tx3)}
+.empty i{width:36px;height:36px;opacity:.25;margin-bottom:10px}
+.empty p{font-size:13px}
+
+/* ── toast ── */
+.toasts{position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column-reverse;gap:6px;pointer-events:none}
+.tst{pointer-events:auto;background:var(--bg3);border:1px solid var(--bdH);border-radius:var(--r);padding:10px 14px;min-width:260px;max-width:380px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500;animation:tIn .25s ease;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.tst i{width:16px;height:16px;flex-shrink:0}
+.tst.ok i{color:var(--gn)}.tst.er i{color:var(--rd)}.tst.nf i{color:var(--ac)}
+@keyframes tIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── modal ── */
+.mo-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:200;align-items:center;justify-content:center;padding:20px}
+.mo-bg.on{display:flex}
+.mo-box{background:var(--bg2);border:1px solid var(--bdH);border-radius:var(--rxl);padding:22px;width:100%;max-width:380px;box-shadow:0 16px 48px rgba(0,0,0,.5)}
+.mo-box h3{font-size:14px;font-weight:700;margin-bottom:4px}
+.mo-box p{font-size:12px;color:var(--tx3);margin-bottom:14px}
+.mo-f{width:100%;padding:9px 12px;background:var(--bg4);border:1px solid var(--bdH);border-radius:6px;color:var(--tx);font-family:var(--mono);font-size:12px;outline:none;margin-bottom:12px}
+.mo-f:focus{border-color:var(--ac)}
+.mo-sel{width:100%;padding:9px 12px;background:var(--bg4);border:1px solid var(--bdH);border-radius:6px;color:var(--tx);font-size:12px;outline:none;margin-bottom:12px;cursor:pointer}
+.mo-act{display:flex;gap:6px;justify-content:flex-end}
+.shade{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:90}
+.shade.on{display:block}
+
+/* ── responsive ── */
+@media(max-width:1100px){.g6{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:900px){
+.sb{transform:translateX(-100%)}.sb.open{transform:translateX(0)}
+.mn{margin-left:0}.burger{display:flex}
+.g6{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:640px){
+html{font-size:13px}
+.pg{padding:14px}.hd{padding:0 14px;height:48px}
+.g6{grid-template-columns:repeat(2,1fr)}.g4{grid-template-columns:1fr 1fr}
+.st{padding:12px}.st-val{font-size:17px}.st-ic{width:24px;height:24px}.st-ic i{width:12px;height:12px}
+.ctrls{gap:6px}.ctrls .btn{flex:1;justify-content:center}
+.tm{height:calc(100dvh - 120px)}.tm-body{font-size:10.5px;padding:10px}
+.fmh{display:none!important}
+.pg2{grid-template-columns:1fr}
+.pt td{display:block;padding:5px 14px}.pk{width:auto;white-space:normal;padding-bottom:2px}
+.hd-right .btn span{display:none}
+.toasts{bottom:12px;right:12px;left:12px}.tst{min-width:auto;max-width:none}
+.g2-mob{grid-template-columns:1fr!important}
+}
+@media(max-width:380px){.g6,.g4{grid-template-columns:1fr 1fr}.st-lbl{font-size:9px}}
+</style>
+</head>
+<body>
+
+<div class="shade" id="shade" onclick="closeSb()"></div>
+
+<div class="shell">
+
+<!-- SIDEBAR -->
+<aside class="sb" id="sb">
+<div class="sb-logo">
+<div class="sb-logo-ic"><i data-lucide="server"></i></div>
+<div><div class="sb-logo-tx">MCPanel</div><div class="sb-logo-sub">Server Manager</div></div>
+</div>
+<nav class="sb-nav">
+<div class="sb-lbl">General</div>
+<button class="sb-item on" onclick="go('dash',this)"><i data-lucide="layout-dashboard"></i>Dashboard</button>
+<button class="sb-item" onclick="go('con',this)"><i data-lucide="terminal"></i>Console</button>
+<div class="sb-lbl">Manage</div>
+<button class="sb-item" onclick="go('files',this)"><i data-lucide="folder-open"></i>Files</button>
+<button class="sb-item" onclick="go('props',this)"><i data-lucide="sliders-horizontal"></i>Configuration</button>
+<button class="sb-item" onclick="go('ppl',this)"><i data-lucide="users-round"></i>Players</button>
+</nav>
+<div class="sb-foot">
+<div class="sb-pill">
+<div class="sb-dot off" id="sDot"></div>
+<span class="sb-stx off" id="sTx">Offline</span>
+</div>
+<div class="sb-extra" id="sUp">Uptime: --</div>
+</div>
+</aside>
+
+<!-- MAIN -->
+<div class="mn">
+<header class="hd">
+<div class="hd-left">
+<button class="burger" onclick="openSb()"><i data-lucide="menu"></i></button>
+<span class="hd-title" id="hT">Dashboard</span>
+</div>
+<div class="hd-right">
+<button class="btn btn-xs btn-gn" onclick="act('start')"><i data-lucide="play"></i><span>Start</span></button>
+<button class="btn btn-xs btn-rd" onclick="act('stop')"><i data-lucide="square"></i><span>Stop</span></button>
+<button class="btn btn-xs btn-am" onclick="act('restart')"><i data-lucide="rotate-cw"></i><span>Restart</span></button>
+</div>
+</header>
+
+<div class="pg">
+
+<!-- DASHBOARD -->
+<div class="vw on" id="v-dash">
+<div class="g g6">
+<div class="st"><div class="st-top"><span class="st-lbl">CPU</span><div class="st-ic bl"><i data-lucide="cpu"></i></div></div><div class="st-val" id="dC">0%</div><div class="bar"><div class="bar-f" id="dCB" style="width:0;background:var(--ac)"></div></div></div>
+<div class="st"><div class="st-top"><span class="st-lbl">Memory</span><div class="st-ic gn"><i data-lucide="memory-stick"></i></div></div><div class="st-val" id="dR">0 MB</div><div class="st-hint" id="dRH">of 0 MB</div><div class="bar"><div class="bar-f" id="dRB" style="width:0;background:var(--gn)"></div></div></div>
+<div class="st"><div class="st-top"><span class="st-lbl">Disk</span><div class="st-ic pr"><i data-lucide="hard-drive"></i></div></div><div class="st-val" id="dD">0 GB</div><div class="st-hint" id="dDH">of 0 GB</div><div class="bar"><div class="bar-f" id="dDB" style="width:0;background:var(--pr)"></div></div></div>
+<div class="st"><div class="st-top"><span class="st-lbl">Players</span><div class="st-ic cy"><i data-lucide="users-round"></i></div></div><div class="st-val" id="dP">0</div><div class="st-hint">online</div></div>
+<div class="st"><div class="st-top"><span class="st-lbl">Uptime</span><div class="st-ic am"><i data-lucide="clock"></i></div></div><div class="st-val" id="dU" style="font-size:15px">--</div></div>
+<div class="st"><div class="st-top"><span class="st-lbl">Java</span><div class="st-ic rd"><i data-lucide="coffee"></i></div></div><div class="st-val" id="dJ" style="font-size:10.5px;font-family:var(--mono)">-</div></div>
+</div>
+<div class="ctrls">
+<button class="btn" onclick="act('backup')"><i data-lucide="archive"></i>Backup</button>
+<button class="btn" onclick="openSayModal()"><i data-lucide="megaphone"></i>Broadcast</button>
+</div>
+<div class="g g4">
+<div class="st"><div class="st-top"><span class="st-lbl">Joins</span><div class="st-ic gn"><i data-lucide="log-in"></i></div></div><div class="st-val" id="xJ">0</div></div>
+<div class="st"><div class="st-top"><span class="st-lbl">Deaths</span><div class="st-ic rd"><i data-lucide="skull"></i></div></div><div class="st-val" id="xD">0</div></div>
+<div class="st"><div class="st-top"><span class="st-lbl">Advancements</span><div class="st-ic am"><i data-lucide="trophy"></i></div></div><div class="st-val" id="xA">0</div></div>
+<div class="st"><div class="st-top"><span class="st-lbl">Chat</span><div class="st-ic cy"><i data-lucide="message-circle"></i></div></div><div class="st-val" id="xC">0</div></div>
+</div>
+</div>
+
+<!-- CONSOLE -->
+<div class="vw" id="v-con">
+<div class="tm">
+<div class="tm-bar"><div style="display:flex;align-items:center;gap:8px"><div class="tm-dots"><span class="tm-d tm-dr"></span><span class="tm-d tm-dy"></span><span class="tm-d tm-dg"></span></div><span class="tm-lbl">server console</span></div><button class="btn btn-xs" onclick="fCon()"><i data-lucide="refresh-cw"></i>Refresh</button></div>
+<div class="tm-body" id="tB">Waiting for output...</div>
+<div class="tm-ibar"><span class="tm-prompt">&gt;</span><input class="tm-in" id="tI" placeholder="Enter command..." onkeydown="if(event.key==='Enter')sCmd()"></div>
+</div>
+</div>
+
+<!-- FILES -->
+<div class="vw" id="v-files">
+<div class="fm-bar">
+<div class="crumbs" id="cr"></div>
+<button class="btn btn-xs" onclick="document.getElementById('upIn').click()"><i data-lucide="upload"></i><span class="fmh">Upload</span></button>
+<input type="file" id="upIn" style="display:none" onchange="upFile(this)" multiple>
+<button class="btn btn-xs" onclick="openMo('New File','','mkfile')"><i data-lucide="file-plus"></i><span class="fmh">File</span></button>
+<button class="btn btn-xs" onclick="openMo('New Folder','','mkdir')"><i data-lucide="folder-plus"></i><span class="fmh">Folder</span></button>
+<button class="btn btn-xs btn-ic" onclick="lDir(cDir)"><i data-lucide="refresh-cw"></i></button>
+</div>
+<div class="cd"><div style="overflow-x:auto"><table class="ft"><thead><tr><th>Name</th><th class="fmh" style="width:90px">Size</th><th class="fmh" style="width:150px">Modified</th><th style="width:100px">Actions</th></tr></thead><tbody id="fB"></tbody></table></div></div>
+<div class="ed" id="ed">
+<div class="ed-h"><div class="ed-file"><i data-lucide="file-code"></i><span id="eP">-</span></div><div style="display:flex;gap:6px"><button class="btn btn-xs btn-ac" onclick="sEd()"><i data-lucide="save"></i>Save</button><button class="btn btn-xs" onclick="cEd()"><i data-lucide="x"></i>Close</button></div></div>
+<textarea class="ed-area" id="eA" spellcheck="false"></textarea>
+</div>
+</div>
+
+<!-- PROPERTIES -->
+<div class="vw" id="v-props">
+<div class="cd">
+<div class="cd-h"><div class="cd-hl"><i data-lucide="sliders-horizontal"></i>server.properties</div><button class="btn btn-xs btn-ac" onclick="sProp()"><i data-lucide="save"></i>Save</button></div>
+<div style="overflow-x:auto"><table class="pt" id="pT"></table></div>
+</div>
+</div>
+
+<!-- PLAYERS -->
+<div class="vw" id="v-ppl">
+<div class="ctrls" style="margin-bottom:14px">
+<button class="btn btn-xs" onclick="pMo('kick')"><i data-lucide="user-minus"></i>Kick</button>
+<button class="btn btn-xs btn-rd" onclick="pMo('ban')"><i data-lucide="shield-ban"></i>Ban</button>
+<button class="btn btn-xs btn-gn" onclick="pMo('unban')"><i data-lucide="shield-check"></i>Unban</button>
+<button class="btn btn-xs btn-am" onclick="pMo('op')"><i data-lucide="crown"></i>Op</button>
+<button class="btn btn-xs" onclick="pMo('deop')"><i data-lucide="crown"></i>Deop</button>
+<button class="btn btn-xs" onclick="pMo('wl-add')"><i data-lucide="list-plus"></i>WL Add</button>
+<button class="btn btn-xs" onclick="pMo('wl-rm')"><i data-lucide="list-minus"></i>WL Remove</button>
+<button class="btn btn-xs" onclick="pMo('gm')"><i data-lucide="gamepad-2"></i>Gamemode</button>
+<button class="btn btn-xs" onclick="pMo('tp')"><i data-lucide="map-pin"></i>Teleport</button>
+</div>
+
+<div class="cd" style="margin-bottom:14px">
+<div class="cd-h"><div class="cd-hl"><i data-lucide="users-round"></i>Online Players</div><button class="btn btn-xs" onclick="lPpl()"><i data-lucide="refresh-cw"></i>Refresh</button></div>
+<div style="padding:16px"><div class="pg2" id="pG"><div class="empty"><i data-lucide="user-x"></i><p>No players online</p></div></div></div>
+</div>
+
+<div class="g g2 g2-mob">
+<div class="cd">
+<div class="cd-h"><div class="cd-hl"><i data-lucide="crown"></i>Operators</div><button class="btn btn-xs btn-ic" onclick="lOps()"><i data-lucide="refresh-cw"></i></button></div>
+<div style="padding:14px"><div id="opL" style="display:flex;flex-direction:column;gap:6px"><div class="empty"><p>Loading...</p></div></div></div>
+</div>
+<div class="cd">
+<div class="cd-h"><div class="cd-hl"><i data-lucide="shield-ban"></i>Banned</div><button class="btn btn-xs btn-ic" onclick="lBan()"><i data-lucide="refresh-cw"></i></button></div>
+<div style="padding:14px"><div id="bnL" style="display:flex;flex-direction:column;gap:6px"><div class="empty"><p>Loading...</p></div></div></div>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+
+<div class="toasts" id="tsts"></div>
+
+<div class="mo-bg" id="moBg">
+<div class="mo-box" id="moBox">
+<h3 id="moT">Create</h3>
+<p id="moD">Enter a name below.</p>
+<input class="mo-f" id="moI" placeholder="Enter name..." onkeydown="if(event.key==='Enter')cfmMo()">
+<div class="mo-act">
+<button class="btn" onclick="clMo()">Cancel</button>
+<button class="btn btn-ac" onclick="cfmMo()">Confirm</button>
+</div>
+</div>
+</div>
+
+<script>
+lucide.createIcons();
+let cDir='/',ePath='',moMeta={},conI=null;
+
+/* sidebar */
+function openSb(){document.getElementById('sb').classList.add('open');document.getElementById('shade').classList.add('on')}
+function closeSb(){document.getElementById('sb').classList.remove('open');document.getElementById('shade').classList.remove('on')}
+
+/* nav */
+const titles={dash:'Dashboard',con:'Console',files:'Files',props:'Configuration',ppl:'Players'};
+function go(v,el){
+document.querySelectorAll('.vw').forEach(x=>x.classList.remove('on'));
+document.querySelectorAll('.sb-item').forEach(x=>x.classList.remove('on'));
+document.getElementById('v-'+v).classList.add('on');
+if(el)el.classList.add('on');
+document.getElementById('hT').textContent=titles[v]||v;
+if(conI)clearInterval(conI);
+if(v==='con'){fCon();conI=setInterval(fCon,3000)}
+if(v==='files')lDir(cDir);
+if(v==='props')lProp();
+if(v==='ppl'){lPpl();lOps();lBan()}
+closeSb();
+}
+
+/* toast */
+function nt(m,t='nf'){const w=document.getElementById('tsts'),e=document.createElement('div');e.className='tst '+t;const ic={ok:'check-circle',er:'alert-circle',nf:'info'};e.innerHTML=`<i data-lucide="${ic[t]||'info'}"></i><span>${m}</span>`;w.appendChild(e);lucide.createIcons({nodes:[e]});setTimeout(()=>e.remove(),4000)}
+
+/* api */
+async function $a(p,m='GET',b=null){try{const o={method:m};if(b){o.headers={'Content-Type':'application/json'};o.body=JSON.stringify(b)}const r=await fetch('/api'+p,o);return await r.json()}catch(e){return null}}
+
+/* refresh dashboard */
+async function rf(){
+const s=await $a('/status');if(!s)return;
+const d=document.getElementById('sDot'),t=document.getElementById('sTx'),u=document.getElementById('sUp');
+if(s.running){d.className='sb-dot on';t.className='sb-stx on';t.textContent='Online'}
+else{d.className='sb-dot off';t.className='sb-stx off';t.textContent='Offline'}
+u.textContent='Uptime: '+(s.uptime||'--');
+document.getElementById('dC').textContent=s.cpu+'%';
+document.getElementById('dCB').style.width=Math.min(s.cpu,100)+'%';
+document.getElementById('dR').textContent=s.ram_used+' MB';
+document.getElementById('dRH').textContent='of '+s.ram_total+' MB';
+const rp=s.ram_total?(s.ram_used/s.ram_total*100):0;
+document.getElementById('dRB').style.width=rp+'%';
+document.getElementById('dD').textContent=s.disk_used+' GB';
+document.getElementById('dDH').textContent='of '+s.disk_total+' GB';
+const dp=s.disk_total?(s.disk_used/s.disk_total*100):0;
+document.getElementById('dDB').style.width=dp+'%';
+document.getElementById('dU').textContent=s.uptime||'--';
+document.getElementById('dJ').textContent=s.java_version||'-';
+const p=await $a('/players');if(p)document.getElementById('dP').textContent=p.count;
+const st=await $a('/stats');if(st){document.getElementById('xJ').textContent=st.total_joins;document.getElementById('xD').textContent=st.deaths;document.getElementById('xA').textContent=st.advancements;document.getElementById('xC').textContent=st.chat_messages}
+}
+
+/* actions */
+async function act(a){nt('Sending '+a+'...','nf');const r=await $a('/'+a,'POST');r?.success?nt(r.message,'ok'):nt(r?.message||'Failed','er');setTimeout(rf,3000)}
+
+/* console */
+async function fCon(){const d=await $a('/console');if(!d)return;const el=document.getElementById('tB');const ab=el.scrollHeight-el.scrollTop-el.clientHeight<60;el.textContent=d.logs;if(ab)el.scrollTop=el.scrollHeight}
+async function sCmd(){const i=document.getElementById('tI'),c=i.value.trim();if(!c)return;const r=await $a('/command','POST',{command:c});r?.success?nt('Sent: '+c,'ok'):nt('Failed','er');i.value='';setTimeout(fCon,800)}
+
+/* files */
+async function lDir(p){
+cDir=p||'/';
+const d=await $a('/files?path='+encodeURIComponent(cDir));if(!d||d.error){nt(d?.error||'Failed','er');return}
+const cb=document.getElementById('cr');const pts=cDir.split('/').filter(Boolean);
+let ch=`<span class="crumb" onclick="lDir('/')">root</span>`;let ac='';
+pts.forEach(p=>{ac+='/'+p;const pp=ac;ch+=`<span class="crumb-s">/</span><span class="crumb" onclick="lDir('${pp}')">${p}</span>`});
+cb.innerHTML=ch;
+const tb=document.getElementById('fB');let h='';
+if(cDir!=='/'&&cDir!=='.'){const pr=cDir.split('/').slice(0,-1).join('/')||'/';h+=`<tr ondblclick="lDir('${pr}')"><td><div class="fn"><div class="fi dir"><i data-lucide="corner-left-up"></i></div><span class="ftx">..</span></div></td><td class="fmeta fmh">-</td><td class="fmeta fmh">-</td><td>-</td></tr>`}
+const sr=d.files.sort((a,b)=>{if(a.is_dir!==b.is_dir)return a.is_dir?-1:1;return a.name.localeCompare(b.name)});
+sr.forEach(f=>{const ic=f.is_dir?'dir':fIC(f.name);const nm=f.is_dir?'folder':fIN(f.name);const sz=f.is_dir?'-':fSz(f.size);const db=f.is_dir?`ondblclick="lDir('${f.path}')"`:`ondblclick="oEd('${f.path}')"`;
+h+=`<tr ${db}><td><div class="fn"><div class="fi ${ic}"><i data-lucide="${nm}"></i></div><span class="ftx">${f.name}</span></div></td><td class="fmeta fmh">${sz}</td><td class="fmeta fmh">${f.modified}</td><td><div class="fact">${!f.is_dir?`<button class="btn btn-xs btn-ic" onclick="event.stopPropagation();oEd('${f.path}')" title="Edit"><i data-lucide="pencil"></i></button><button class="btn btn-xs btn-ic" onclick="event.stopPropagation();dlFile('${f.path}')" title="Download"><i data-lucide="download"></i></button>`:''}<button class="btn btn-xs btn-ic" onclick="event.stopPropagation();openMo('Rename','${f.name}','rename','${f.path}')" title="Rename"><i data-lucide="type"></i></button><button class="btn btn-xs btn-ic" onclick="event.stopPropagation();delF('${f.path}','${f.name}')" title="Delete"><i data-lucide="trash-2"></i></button></div></td></tr>`});
+if(!sr.length)h+=`<tr><td colspan="4"><div class="empty"><i data-lucide="folder-open"></i><p>Empty directory</p></div></td></tr>`;
+tb.innerHTML=h;lucide.createIcons();
+}
+
+function fIC(n){const e=n.split('.').pop().toLowerCase();if(['yml','yaml','json','properties','toml'].includes(e))return'cfg';if(['log','txt'].includes(e))return'log';if(e==='jar')return'jar';if(['sh','py','js','ts'].includes(e))return'code';return'gen'}
+function fIN(n){const e=n.split('.').pop().toLowerCase();if(['yml','yaml','json','properties','toml'].includes(e))return'file-cog';if(['log','txt'].includes(e))return'file-text';if(e==='jar')return'package';if(['sh','py','js','ts'].includes(e))return'file-code';if(['png','jpg','gif','svg','ico'].includes(e))return'image';if(['dat','dat_old','mca','mcr','nbt'].includes(e))return'database';return'file'}
+function fSz(b){if(!b)return'0 B';const u=['B','KB','MB','GB'];const i=Math.floor(Math.log(b)/Math.log(1024));return(b/Math.pow(1024,i)).toFixed(i?1:0)+' '+u[i]}
+
+async function oEd(p){const d=await $a('/file/read?path='+encodeURIComponent(p));if(!d||d.error){nt(d?.error||'Cannot open','er');return}ePath=p;document.getElementById('eP').textContent=p;document.getElementById('eA').value=d.content;document.getElementById('ed').classList.add('on');lucide.createIcons()}
+async function sEd(){const r=await $a('/file/save','POST',{path:ePath,content:document.getElementById('eA').value});r?.success?nt('Saved','ok'):nt(r?.message||'Failed','er')}
+function cEd(){document.getElementById('ed').classList.remove('on')}
+async function delF(p,n){if(!confirm('Delete "'+n+'"?'))return;const r=await $a('/file/delete','POST',{path:p});r?.success?(nt('Deleted','ok'),lDir(cDir)):nt(r?.message||'Failed','er')}
+function dlFile(p){const a=document.createElement('a');a.href='/api/file/download?path='+encodeURIComponent(p);a.download='';document.body.appendChild(a);a.click();a.remove();nt('Downloading...','nf')}
+
+async function upFile(inp){
+if(!inp.files.length)return;
+for(const f of inp.files){nt('Uploading '+f.name+'...','nf');const fd=new FormData();fd.append('file',f);fd.append('path',cDir==='/'?'/':cDir);
+try{const r=await fetch('/api/file/upload',{method:'POST',body:fd});const d=await r.json();d.success?nt(d.message,'ok'):nt(d.message||'Failed','er')}catch(e){nt('Upload failed','er')}}
+inp.value='';lDir(cDir);
+}
+
+/* editor tab */
+document.getElementById('eA').addEventListener('keydown',function(e){if(e.key==='Tab'){e.preventDefault();const s=this.selectionStart,end=this.selectionEnd;this.value=this.value.substring(0,s)+'  '+this.value.substring(end);this.selectionStart=this.selectionEnd=s+2}});
+
+/* properties */
+async function lProp(){const d=await $a('/properties');if(!d)return;const t=document.getElementById('pT');let h='';Object.entries(d.properties).sort().forEach(([k,v])=>{h+=`<tr><td class="pk">${k}</td><td><input class="pi" data-key="${k}" value="${v}"></td></tr>`});t.innerHTML=h}
+async function sProp(){const p={};document.querySelectorAll('.pi').forEach(i=>p[i.dataset.key]=i.value);const r=await $a('/properties','POST',{properties:p});r?.success?nt(r.message,'ok'):nt(r?.message||'Failed','er')}
+
+/* players */
+async function lPpl(){
+const d=await $a('/players');if(!d)return;
+const g=document.getElementById('pG');
+if(!d.players.length){g.innerHTML='<div class="empty"><i data-lucide="user-x"></i><p>No players online</p></div>';lucide.createIcons();return}
+let h='';d.players.forEach(n=>{
+h+=`<div class="pc"><div class="pa"><i data-lucide="user"></i></div><div style="flex:1"><div class="pn">${n}</div><div class="po"><span class="po-d"></span>Online</div></div><div style="display:flex;gap:4px"><button class="btn btn-xs btn-ic" onclick="pMo('kick');setTimeout(()=>document.getElementById('pmP').value='${n}',100)" title="Kick"><i data-lucide="user-minus"></i></button><button class="btn btn-xs btn-ic" onclick="pMo('gm');setTimeout(()=>document.getElementById('pmP').value='${n}',100)" title="Gamemode"><i data-lucide="gamepad-2"></i></button><button class="btn btn-xs btn-ic" onclick="pMo('tp');setTimeout(()=>document.getElementById('pmP').value='${n}',100)" title="TP"><i data-lucide="map-pin"></i></button></div></div>`});
+g.innerHTML=h;lucide.createIcons();
+}
+
+async function lOps(){const d=await $a('/ops');if(!d)return;const el=document.getElementById('opL');if(!d.ops.length){el.innerHTML='<div class="empty"><p>No operators</p></div>';return}let h='';d.ops.forEach(o=>{const n=o.name||o;h+=`<div class="pmr"><div style="display:flex;align-items:center;gap:8px"><div class="pa" style="width:26px;height:26px"><i data-lucide="crown" style="width:12px;height:12px"></i></div><span class="pn">${n}</span></div><button class="btn btn-xs btn-rd" onclick="pAct('deop','${n}')">Remove</button></div>`});el.innerHTML=h;lucide.createIcons()}
+
+async function lBan(){const d=await $a('/banned');if(!d)return;const el=document.getElementById('bnL');if(!d.banned.length){el.innerHTML='<div class="empty"><p>No banned players</p></div>';return}let h='';d.banned.forEach(b=>{const n=b.name||b;const r=b.reason||'';h+=`<div class="pmr"><div><span class="pn">${n}</span>${r?`<div class="pmi">${r}</div>`:''}</div><button class="btn btn-xs btn-gn" onclick="pAct('unban','${n}')">Unban</button></div>`});el.innerHTML=h;lucide.createIcons()}
+
+async function pAct(a,p,x){const b={player:p};if(x)Object.assign(b,x);const r=await $a('/'+a,'POST',b);r?.success?nt(r.message,'ok'):nt(r?.message||'Failed','er');setTimeout(()=>{lPpl();lOps();lBan()},1000)}
+
+/* player modal */
+function pMo(a){
+const cfg={
+kick:{t:'Kick Player',d:'Enter player name to kick.',f:['player','reason']},
+ban:{t:'Ban Player',d:'Enter player name to ban.',f:['player','reason']},
+unban:{t:'Unban Player',d:'Enter player name to unban.',f:['player']},
+op:{t:'Op Player',d:'Give operator permissions.',f:['player']},
+deop:{t:'Deop Player',d:'Remove operator permissions.',f:['player']},
+'wl-add':{t:'Whitelist Add',d:'Add player to whitelist.',f:['player']},
+'wl-rm':{t:'Whitelist Remove',d:'Remove from whitelist.',f:['player']},
+gm:{t:'Change Gamemode',d:'Set a player\'s gamemode.',f:['player','mode']},
+tp:{t:'Teleport',d:'Teleport player to target.',f:['player','target']},
+};
+const c=cfg[a];if(!c)return;
+const box=document.getElementById('moBox');
+let h=`<h3>${c.t}</h3><p>${c.d}</p><input class="mo-f" id="pmP" placeholder="Player name...">`;
+if(c.f.includes('reason'))h+=`<input class="mo-f" id="pmR" placeholder="Reason (optional)...">`;
+if(c.f.includes('mode'))h+=`<select class="mo-sel" id="pmM"><option value="survival">Survival</option><option value="creative">Creative</option><option value="adventure">Adventure</option><option value="spectator">Spectator</option></select>`;
+if(c.f.includes('target'))h+=`<input class="mo-f" id="pmT" placeholder="Target player or x y z...">`;
+h+=`<div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="exPa('${a}')">Confirm</button></div>`;
+box.innerHTML=h;document.getElementById('moBg').classList.add('on');
+setTimeout(()=>{const i=document.getElementById('pmP');if(i)i.focus()},100);
+}
+
+async function exPa(a){
+const p=document.getElementById('pmP')?.value.trim();if(!p){nt('Enter player name','er');return}
+clMo();
+if(a==='kick'){await pAct('kick',p,{reason:document.getElementById('pmR')?.value||'Kicked by admin'})}
+else if(a==='ban'){await pAct('ban',p,{reason:document.getElementById('pmR')?.value||'Banned by admin'})}
+else if(a==='unban'){await pAct('unban',p)}
+else if(a==='op'){await pAct('op',p)}
+else if(a==='deop'){await pAct('deop',p)}
+else if(a==='wl-add'){const r=await $a('/whitelist','POST',{action:'add',player:p});r?.success?nt(r.message,'ok'):nt('Failed','er')}
+else if(a==='wl-rm'){const r=await $a('/whitelist','POST',{action:'remove',player:p});r?.success?nt(r.message,'ok'):nt('Failed','er')}
+else if(a==='gm'){const m=document.getElementById('pmM')?.value||'survival';const r=await $a('/gamemode','POST',{player:p,mode:m});r?.success?nt(r.message,'ok'):nt('Failed','er')}
+else if(a==='tp'){const t=document.getElementById('pmT')?.value.trim();if(!t){nt('Enter target','er');return}const r=await $a('/tp','POST',{player:p,target:t});r?.success?nt(r.message,'ok'):nt('Failed','er')}
+}
+
+/* broadcast modal */
+function openSayModal(){
+const box=document.getElementById('moBox');
+box.innerHTML=`<h3>Broadcast Message</h3><p>Send a message to all players.</p><input class="mo-f" id="sayI" placeholder="Type message..."><div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="sendSay()">Send</button></div>`;
+document.getElementById('moBg').classList.add('on');
+setTimeout(()=>document.getElementById('sayI').focus(),100);
+}
+
+async function sendSay(){
+const m=document.getElementById('sayI')?.value.trim();if(!m){nt('Enter a message','er');return}
+clMo();const r=await $a('/say','POST',{message:m});r?.success?nt(r.message,'ok'):nt('Failed','er');
+}
+
+/* generic modal */
+function openMo(t,v,a,x){
+const box=document.getElementById('moBox');
+box.innerHTML=`<h3>${t}</h3><p>Enter a name below.</p><input class="mo-f" id="moI" placeholder="Enter name..." value="${v||''}" onkeydown="if(event.key==='Enter')cfmMo()"><div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="cfmMo()">Confirm</button></div>`;
+document.getElementById('moBg').classList.add('on');
+moMeta={a,x};
+setTimeout(()=>document.getElementById('moI').focus(),100);
+}
+
+function clMo(){document.getElementById('moBg').classList.remove('on')}
+
+async function cfmMo(){
+const v=document.getElementById('moI')?.value.trim();if(!v)return;clMo();
+if(moMeta.a==='mkfile'){const p=(cDir==='/'?'':cDir)+'/'+v;const r=await $a('/file/create','POST',{path:p,content:''});r?.success?(nt('Created','ok'),lDir(cDir)):nt('Failed','er')}
+else if(moMeta.a==='mkdir'){const p=(cDir==='/'?'':cDir)+'/'+v;const r=await $a('/file/mkdir','POST',{path:p});r?.success?(nt('Created','ok'),lDir(cDir)):nt('Failed','er')}
+else if(moMeta.a==='rename'){const o=moMeta.x;const d=o.substring(0,o.lastIndexOf('/'));const r=await $a('/file/rename','POST',{old_path:o,new_path:d+'/'+v});r?.success?(nt('Renamed','ok'),lDir(cDir)):nt('Failed','er')}
+}
+
+/* init */
+rf();setInterval(rf,5000);lDir('/');
+</script>
+</body>
+</html>
