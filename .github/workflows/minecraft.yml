@@ -15,30 +15,11 @@ jobs:
         run: |
           echo "📦 Installing dependencies..."
           sudo apt-get update
-          
-          # Install Java 21
-          echo "☕ Installing Java 21..."
-          sudo apt-get install -y openjdk-21-jdk-headless
-          
-          # Set Java 21 as default
-          echo "🔧 Setting Java 21 as default..."
+          sudo apt-get install -y openjdk-21-jdk-headless python3-pip screen jq
           sudo update-alternatives --set java /usr/lib/jvm/java-21-openjdk-amd64/bin/java
           sudo update-alternatives --set javac /usr/lib/jvm/java-21-openjdk-amd64/bin/javac
-          
-          # Install other tools (Docker already on runner)
-          echo "🔧 Installing tools..."
-          sudo apt-get install -y python3-pip screen jq
-          
-          # Install Python packages
-          echo "🐍 Installing Python packages..."
           pip3 install huggingface_hub requests
-          
-          # Verify installations
-          echo "✅ Verifying installations..."
           java -version
-          python3 --version
-          docker --version
-          
           echo "✅ All dependencies installed!"
 
       - name: Cancel Previous Runs
@@ -68,6 +49,9 @@ jobs:
         run: bash scripts/tunnel-manager.sh start
         env:
           PLAYIT_SECRET_KEY: ${{ secrets.PLAYIT_SECRET_KEY }}
+
+      - name: Setup Panel & Cloudflared
+        run: bash scripts/setup-panel.sh
 
       - name: Start Minecraft Server
         run: bash scripts/start-server.sh
