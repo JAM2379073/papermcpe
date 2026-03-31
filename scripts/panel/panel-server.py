@@ -11,6 +11,9 @@ import time
 SERVER_DIR = os.path.abspath("minecraft-server")
 PANEL_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# ✅ NEW: Configure your Cloudflare domains here
+FRONTEND_DOMAIN = "https://panel.projectxglory.qzz.io"
+API_DOMAIN = "https://wings.projectxglory.qzz.io"
 
 class PanelHandler(SimpleHTTPRequestHandler):
 
@@ -88,12 +91,15 @@ class PanelHandler(SimpleHTTPRequestHandler):
         else:
             self.send_error(404)
 
-    # ── helpers ──
-
+    # ✅ UPDATED: Enhanced send_json with CORS headers
     def send_json(self, data, status=200):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        # ✅ NEW: Specific Cloudflare domain CORS
+        self.send_header("Access-Control-Allow-Origin", FRONTEND_DOMAIN)
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "3600")
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
 
