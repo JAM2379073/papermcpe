@@ -396,6 +396,11 @@ html{font-size:13px}
 </div>
 
 <script>
+// ✅ CRITICAL UPDATE: Set your Cloudflare API domain here
+const API_BASE = 'https://wings.projectxglory.qzz.io';
+
+console.log('API Base URL:', API_BASE);
+
 lucide.createIcons();
 let cDir='/',ePath='',moMeta={},conI=null;
 
@@ -406,46 +411,68 @@ function closeSb(){document.getElementById('sb').classList.remove('open');docume
 /* nav */
 const titles={dash:'Dashboard',con:'Console',files:'Files',props:'Configuration',ppl:'Players'};
 function go(v,el){
-document.querySelectorAll('.vw').forEach(x=>x.classList.remove('on'));
-document.querySelectorAll('.sb-item').forEach(x=>x.classList.remove('on'));
-document.getElementById('v-'+v).classList.add('on');
-if(el)el.classList.add('on');
-document.getElementById('hT').textContent=titles[v]||v;
-if(conI)clearInterval(conI);
-if(v==='con'){fCon();conI=setInterval(fCon,3000)}
-if(v==='files')lDir(cDir);
-if(v==='props')lProp();
-if(v==='ppl'){lPpl();lOps();lBan()}
-closeSb();
+  document.querySelectorAll('.vw').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.sb-item').forEach(x=>x.classList.remove('on'));
+  document.getElementById('v-'+v).classList.add('on');
+  if(el)el.classList.add('on');
+  document.getElementById('hT').textContent=titles[v]||v;
+  if(conI)clearInterval(conI);
+  if(v==='con'){fCon();conI=setInterval(fCon,3000)}
+  if(v==='files')lDir(cDir);
+  if(v==='props')lProp();
+  if(v==='ppl'){lPpl();lOps();lBan()}
+  closeSb();
 }
 
 /* toast */
 function nt(m,t='nf'){const w=document.getElementById('tsts'),e=document.createElement('div');e.className='tst '+t;const ic={ok:'check-circle',er:'alert-circle',nf:'info'};e.innerHTML=`<i data-lucide="${ic[t]||'info'}"></i><span>${m}</span>`;w.appendChild(e);lucide.createIcons({nodes:[e]});setTimeout(()=>e.remove(),4000)}
 
-/* api */
-async function $a(p,m='GET',b=null){try{const o={method:m};if(b){o.headers={'Content-Type':'application/json'};o.body=JSON.stringify(b)}const r=await fetch('/api'+p,o);return await r.json()}catch(e){return null}}
+/* ✅ CRITICAL API FIX: Now calls correct Cloudflare domain */
+async function $a(p,m='GET',b=null){
+  try{
+    const o={method:m};
+    if(b){
+      o.headers={'Content-Type':'application/json'};
+      o.body=JSON.stringify(b)
+    }
+    const fullUrl = API_BASE+'/api'+p;
+    console.log('📡 Calling:', fullUrl);
+    const r=await fetch(fullUrl,o);
+    if(!r.ok){
+      console.error('❌ HTTP Error:', r.status, r.statusText);
+      throw new Error(`API Error: ${r.status}`)
+    }
+    const data = await r.json();
+    console.log('✅ Response:', data);
+    return data;
+  }catch(e){
+    console.error('❌ API Error:', e);
+    nt('API Error: ' + e.message, 'er');
+    return null
+  }
+}
 
 /* refresh dashboard */
 async function rf(){
-const s=await $a('/status');if(!s)return;
-const d=document.getElementById('sDot'),t=document.getElementById('sTx'),u=document.getElementById('sUp');
-if(s.running){d.className='sb-dot on';t.className='sb-stx on';t.textContent='Online'}
-else{d.className='sb-dot off';t.className='sb-stx off';t.textContent='Offline'}
-u.textContent='Uptime: '+(s.uptime||'--');
-document.getElementById('dC').textContent=s.cpu+'%';
-document.getElementById('dCB').style.width=Math.min(s.cpu,100)+'%';
-document.getElementById('dR').textContent=s.ram_used+' MB';
-document.getElementById('dRH').textContent='of '+s.ram_total+' MB';
-const rp=s.ram_total?(s.ram_used/s.ram_total*100):0;
-document.getElementById('dRB').style.width=rp+'%';
-document.getElementById('dD').textContent=s.disk_used+' GB';
-document.getElementById('dDH').textContent='of '+s.disk_total+' GB';
-const dp=s.disk_total?(s.disk_used/s.disk_total*100):0;
-document.getElementById('dDB').style.width=dp+'%';
-document.getElementById('dU').textContent=s.uptime||'--';
-document.getElementById('dJ').textContent=s.java_version||'-';
-const p=await $a('/players');if(p)document.getElementById('dP').textContent=p.count;
-const st=await $a('/stats');if(st){document.getElementById('xJ').textContent=st.total_joins;document.getElementById('xD').textContent=st.deaths;document.getElementById('xA').textContent=st.advancements;document.getElementById('xC').textContent=st.chat_messages}
+  const s=await $a('/status');if(!s)return;
+  const d=document.getElementById('sDot'),t=document.getElementById('sTx'),u=document.getElementById('sUp');
+  if(s.running){d.className='sb-dot on';t.className='sb-stx on';t.textContent='Online'}
+  else{d.className='sb-dot off';t.className='sb-stx off';t.textContent='Offline'}
+  u.textContent='Uptime: '+(s.uptime||'--');
+  document.getElementById('dC').textContent=s.cpu+'%';
+  document.getElementById('dCB').style.width=Math.min(s.cpu,100)+'%';
+  document.getElementById('dR').textContent=s.ram_used+' MB';
+  document.getElementById('dRH').textContent='of '+s.ram_total+' MB';
+  const rp=s.ram_total?(s.ram_used/s.ram_total*100):0;
+  document.getElementById('dRB').style.width=rp+'%';
+  document.getElementById('dD').textContent=s.disk_used+' GB';
+  document.getElementById('dDH').textContent='of '+s.disk_total+' GB';
+  const dp=s.disk_total?(s.disk_used/s.disk_total*100):0;
+  document.getElementById('dDB').style.width=dp+'%';
+  document.getElementById('dU').textContent=s.uptime||'--';
+  document.getElementById('dJ').textContent=s.java_version||'-';
+  const p=await $a('/players');if(p)document.getElementById('dP').textContent=p.count;
+  const st=await $a('/stats');if(st){document.getElementById('xJ').textContent=st.total_joins;document.getElementById('xD').textContent=st.deaths;document.getElementById('xA').textContent=st.advancements;document.getElementById('xC').textContent=st.chat_messages}
 }
 
 /* actions */
@@ -457,19 +484,18 @@ async function sCmd(){const i=document.getElementById('tI'),c=i.value.trim();if(
 
 /* files */
 async function lDir(p){
-cDir=p||'/';
-const d=await $a('/files?path='+encodeURIComponent(cDir));if(!d||d.error){nt(d?.error||'Failed','er');return}
-const cb=document.getElementById('cr');const pts=cDir.split('/').filter(Boolean);
-let ch=`<span class="crumb" onclick="lDir('/')">root</span>`;let ac='';
-pts.forEach(p=>{ac+='/'+p;const pp=ac;ch+=`<span class="crumb-s">/</span><span class="crumb" onclick="lDir('${pp}')">${p}</span>`});
-cb.innerHTML=ch;
-const tb=document.getElementById('fB');let h='';
-if(cDir!=='/'&&cDir!=='.'){const pr=cDir.split('/').slice(0,-1).join('/')||'/';h+=`<tr ondblclick="lDir('${pr}')"><td><div class="fn"><div class="fi dir"><i data-lucide="corner-left-up"></i></div><span class="ftx">..</span></div></td><td class="fmeta fmh">-</td><td class="fmeta fmh">-</td><td>-</td></tr>`}
-const sr=d.files.sort((a,b)=>{if(a.is_dir!==b.is_dir)return a.is_dir?-1:1;return a.name.localeCompare(b.name)});
-sr.forEach(f=>{const ic=f.is_dir?'dir':fIC(f.name);const nm=f.is_dir?'folder':fIN(f.name);const sz=f.is_dir?'-':fSz(f.size);const db=f.is_dir?`ondblclick="lDir('${f.path}')"`:`ondblclick="oEd('${f.path}')"`;
-h+=`<tr ${db}><td><div class="fn"><div class="fi ${ic}"><i data-lucide="${nm}"></i></div><span class="ftx">${f.name}</span></div></td><td class="fmeta fmh">${sz}</td><td class="fmeta fmh">${f.modified}</td><td><div class="fact">${!f.is_dir?`<button class="btn btn-xs btn-ic" onclick="event.stopPropagation();oEd('${f.path}')" title="Edit"><i data-lucide="pencil"></i></button><button class="btn btn-xs btn-ic" onclick="event.stopPropagation();dlFile('${f.path}')" title="Download"><i data-lucide="download"></i></button>`:''}<button class="btn btn-xs btn-ic" onclick="event.stopPropagation();openMo('Rename','${f.name}','rename','${f.path}')" title="Rename"><i data-lucide="type"></i></button><button class="btn btn-xs btn-ic" onclick="event.stopPropagation();delF('${f.path}','${f.name}')" title="Delete"><i data-lucide="trash-2"></i></button></div></td></tr>`});
-if(!sr.length)h+=`<tr><td colspan="4"><div class="empty"><i data-lucide="folder-open"></i><p>Empty directory</p></div></td></tr>`;
-tb.innerHTML=h;lucide.createIcons();
+  cDir=p||'/';
+  const d=await $a('/files?path='+encodeURIComponent(cDir));if(!d||d.error){nt(d?.error||'Failed','er');return}
+  const cb=document.getElementById('cr');const pts=cDir.split('/').filter(Boolean);
+  let ch=`<span class="crumb" onclick="lDir('/')">root</span>`;let ac='';
+  pts.forEach(p=>{ac+='/'+p;const pp=ac;ch+=`<span class="crumb-s">/</span><span class="crumb" onclick="lDir('${pp}')">${p}</span>`});
+  cb.innerHTML=ch;
+  const tb=document.getElementById('fB');let h='';
+  if(cDir!=='/'&&cDir!=='.'){const pr=cDir.split('/').slice(0,-1).join('/')||'/';h+=`<tr ondblclick="lDir('${pr}')"><td><div class="fn"><div class="fi dir"><i data-lucide="corner-left-up"></i></div><span class="ftx">..</span></div></td><td class="fmeta fmh">-</td><td class="fmeta fmh">-</td><td>-</td></tr>`}
+  const sr=d.files.sort((a,b)=>{if(a.is_dir!==b.is_dir)return a.is_dir?-1:1;return a.name.localeCompare(b.name)});
+  sr.forEach(f=>{const ic=f.is_dir?'dir':fIC(f.name);const nm=f.is_dir?'folder':fIN(f.name);const sz=f.is_dir?'-':fSz(f.size);const db=f.is_dir?`ondblclick="lDir('${f.path}')"`:`ondblclick="oEd('${f.path}')"`; h+=`<tr ${db}><td><div class="fn"><div class="fi ${ic}"><i data-lucide="${nm}"></i></div><span class="ftx">${f.name}</span></div></td><td class="fmeta fmh">${sz}</td><td class="fmeta fmh">${f.modified}</td><td><div class="fact">${!f.is_dir?`<button class="btn btn-xs btn-ic" onclick="event.stopPropagation();oEd('${f.path}')" title="Edit"><i data-lucide="pencil"></i></button><button class="btn btn-xs btn-ic" onclick="event.stopPropagation();dlFile('${f.path}')" title="Download"><i data-lucide="download"></i></button>`:''}<button class="btn btn-xs btn-ic" onclick="event.stopPropagation();openMo('Rename','${f.name}','rename','${f.path}')" title="Rename"><i data-lucide="type"></i></button><button class="btn btn-xs btn-ic" onclick="event.stopPropagation();delF('${f.path}','${f.name}')" title="Delete"><i data-lucide="trash-2"></i></button></div></td></tr>`});
+  if(!sr.length)h+=`<tr><td colspan="4"><div class="empty"><i data-lucide="folder-open"></i><p>Empty directory</p></div></td></tr>`;
+  tb.innerHTML=h;lucide.createIcons();
 }
 
 function fIC(n){const e=n.split('.').pop().toLowerCase();if(['yml','yaml','json','properties','toml'].includes(e))return'cfg';if(['log','txt'].includes(e))return'log';if(e==='jar')return'jar';if(['sh','py','js','ts'].includes(e))return'code';return'gen'}
@@ -480,13 +506,13 @@ async function oEd(p){const d=await $a('/file/read?path='+encodeURIComponent(p))
 async function sEd(){const r=await $a('/file/save','POST',{path:ePath,content:document.getElementById('eA').value});r?.success?nt('Saved','ok'):nt(r?.message||'Failed','er')}
 function cEd(){document.getElementById('ed').classList.remove('on')}
 async function delF(p,n){if(!confirm('Delete "'+n+'"?'))return;const r=await $a('/file/delete','POST',{path:p});r?.success?(nt('Deleted','ok'),lDir(cDir)):nt(r?.message||'Failed','er')}
-function dlFile(p){const a=document.createElement('a');a.href='/api/file/download?path='+encodeURIComponent(p);a.download='';document.body.appendChild(a);a.click();a.remove();nt('Downloading...','nf')}
+function dlFile(p){const a=document.createElement('a');a.href=API_BASE+'/api/file/download?path='+encodeURIComponent(p);a.download='';document.body.appendChild(a);a.click();a.remove();nt('Downloading...','nf')}
 
 async function upFile(inp){
-if(!inp.files.length)return;
-for(const f of inp.files){nt('Uploading '+f.name+'...','nf');const fd=new FormData();fd.append('file',f);fd.append('path',cDir==='/'?'/':cDir);
-try{const r=await fetch('/api/file/upload',{method:'POST',body:fd});const d=await r.json();d.success?nt(d.message,'ok'):nt(d.message||'Failed','er')}catch(e){nt('Upload failed','er')}}
-inp.value='';lDir(cDir);
+  if(!inp.files.length)return;
+  for(const f of inp.files){nt('Uploading '+f.name+'...','nf');const fd=new FormData();fd.append('file',f);fd.append('path',cDir==='/'?'/':cDir);
+  try{const r=await fetch(API_BASE+'/api/file/upload',{method:'POST',body:fd});const d=await r.json();d.success?nt(d.message,'ok'):nt(d.message||'Failed','er')}catch(e){nt('Upload failed','er')}}
+  inp.value='';lDir(cDir);
 }
 
 /* editor tab */
@@ -498,12 +524,12 @@ async function sProp(){const p={};document.querySelectorAll('.pi').forEach(i=>p[
 
 /* players */
 async function lPpl(){
-const d=await $a('/players');if(!d)return;
-const g=document.getElementById('pG');
-if(!d.players.length){g.innerHTML='<div class="empty"><i data-lucide="user-x"></i><p>No players online</p></div>';lucide.createIcons();return}
-let h='';d.players.forEach(n=>{
-h+=`<div class="pc"><div class="pa"><i data-lucide="user"></i></div><div style="flex:1"><div class="pn">${n}</div><div class="po"><span class="po-d"></span>Online</div></div><div style="display:flex;gap:4px"><button class="btn btn-xs btn-ic" onclick="pMo('kick');setTimeout(()=>document.getElementById('pmP').value='${n}',100)" title="Kick"><i data-lucide="user-minus"></i></button><button class="btn btn-xs btn-ic" onclick="pMo('gm');setTimeout(()=>document.getElementById('pmP').value='${n}',100)" title="Gamemode"><i data-lucide="gamepad-2"></i></button><button class="btn btn-xs btn-ic" onclick="pMo('tp');setTimeout(()=>document.getElementById('pmP').value='${n}',100)" title="TP"><i data-lucide="map-pin"></i></button></div></div>`});
-g.innerHTML=h;lucide.createIcons();
+  const d=await $a('/players');if(!d)return;
+  const g=document.getElementById('pG');
+  if(!d.players.length){g.innerHTML='<div class="empty"><i data-lucide="user-x"></i><p>No players online</p></div>';lucide.createIcons();return}
+  let h='';d.players.forEach(n=>{
+  h+=`<div class="pc"><div class="pa"><i data-lucide="user"></i></div><div style="flex:1"><div class="pn">${n}</div><div class="po"><span class="po-d"></span>Online</div></div><div style="display:flex;gap:4px"><button class="btn btn-xs btn-ic" onclick="pMo('kick');setTimeout(()=>document.getElementById('pmP').value='${n}',100)" title="Kick"><i data-lucide="user-minus"></i></button><button class="btn btn-xs btn-ic" onclick="pMo('gm');setTimeout(()=>document.getElementById('pmP').value='${n}',100)" title="Gamemode"><i data-lucide="gamepad-2"></i></button><button class="btn btn-xs btn-ic" onclick="pMo('tp');setTimeout(()=>document.getElementById('pmP').value='${n}',100)" title="TP"><i data-lucide="map-pin"></i></button></div></div>`});
+  g.innerHTML=h;lucide.createIcons();
 }
 
 async function lOps(){const d=await $a('/ops');if(!d)return;const el=document.getElementById('opL');if(!d.ops.length){el.innerHTML='<div class="empty"><p>No operators</p></div>';return}let h='';d.ops.forEach(o=>{const n=o.name||o;h+=`<div class="pmr"><div style="display:flex;align-items:center;gap:8px"><div class="pa" style="width:26px;height:26px"><i data-lucide="crown" style="width:12px;height:12px"></i></div><span class="pn">${n}</span></div><button class="btn btn-xs btn-rd" onclick="pAct('deop','${n}')">Remove</button></div>`});el.innerHTML=h;lucide.createIcons()}
@@ -514,71 +540,71 @@ async function pAct(a,p,x){const b={player:p};if(x)Object.assign(b,x);const r=aw
 
 /* player modal */
 function pMo(a){
-const cfg={
-kick:{t:'Kick Player',d:'Enter player name to kick.',f:['player','reason']},
-ban:{t:'Ban Player',d:'Enter player name to ban.',f:['player','reason']},
-unban:{t:'Unban Player',d:'Enter player name to unban.',f:['player']},
-op:{t:'Op Player',d:'Give operator permissions.',f:['player']},
-deop:{t:'Deop Player',d:'Remove operator permissions.',f:['player']},
-'wl-add':{t:'Whitelist Add',d:'Add player to whitelist.',f:['player']},
-'wl-rm':{t:'Whitelist Remove',d:'Remove from whitelist.',f:['player']},
-gm:{t:'Change Gamemode',d:'Set a player\'s gamemode.',f:['player','mode']},
-tp:{t:'Teleport',d:'Teleport player to target.',f:['player','target']},
-};
-const c=cfg[a];if(!c)return;
-const box=document.getElementById('moBox');
-let h=`<h3>${c.t}</h3><p>${c.d}</p><input class="mo-f" id="pmP" placeholder="Player name...">`;
-if(c.f.includes('reason'))h+=`<input class="mo-f" id="pmR" placeholder="Reason (optional)...">`;
-if(c.f.includes('mode'))h+=`<select class="mo-sel" id="pmM"><option value="survival">Survival</option><option value="creative">Creative</option><option value="adventure">Adventure</option><option value="spectator">Spectator</option></select>`;
-if(c.f.includes('target'))h+=`<input class="mo-f" id="pmT" placeholder="Target player or x y z...">`;
-h+=`<div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="exPa('${a}')">Confirm</button></div>`;
-box.innerHTML=h;document.getElementById('moBg').classList.add('on');
-setTimeout(()=>{const i=document.getElementById('pmP');if(i)i.focus()},100);
+  const cfg={
+  kick:{t:'Kick Player',d:'Enter player name to kick.',f:['player','reason']},
+  ban:{t:'Ban Player',d:'Enter player name to ban.',f:['player','reason']},
+  unban:{t:'Unban Player',d:'Enter player name to unban.',f:['player']},
+  op:{t:'Op Player',d:'Give operator permissions.',f:['player']},
+  deop:{t:'Deop Player',d:'Remove operator permissions.',f:['player']},
+  'wl-add':{t:'Whitelist Add',d:'Add player to whitelist.',f:['player']},
+  'wl-rm':{t:'Whitelist Remove',d:'Remove from whitelist.',f:['player']},
+  gm:{t:'Change Gamemode',d:'Set a player\'s gamemode.',f:['player','mode']},
+  tp:{t:'Teleport',d:'Teleport player to target.',f:['player','target']},
+  };
+  const c=cfg[a];if(!c)return;
+  const box=document.getElementById('moBox');
+  let h=`<h3>${c.t}</h3><p>${c.d}</p><input class="mo-f" id="pmP" placeholder="Player name...">`;
+  if(c.f.includes('reason'))h+=`<input class="mo-f" id="pmR" placeholder="Reason (optional)...">`;
+  if(c.f.includes('mode'))h+=`<select class="mo-sel" id="pmM"><option value="survival">Survival</option><option value="creative">Creative</option><option value="adventure">Adventure</option><option value="spectator">Spectator</option></select>`;
+  if(c.f.includes('target'))h+=`<input class="mo-f" id="pmT" placeholder="Target player or x y z...">`;
+  h+=`<div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="exPa('${a}')">Confirm</button></div>`;
+  box.innerHTML=h;document.getElementById('moBg').classList.add('on');
+  setTimeout(()=>{const i=document.getElementById('pmP');if(i)i.focus()},100);
 }
 
 async function exPa(a){
-const p=document.getElementById('pmP')?.value.trim();if(!p){nt('Enter player name','er');return}
-clMo();
-if(a==='kick'){await pAct('kick',p,{reason:document.getElementById('pmR')?.value||'Kicked by admin'})}
-else if(a==='ban'){await pAct('ban',p,{reason:document.getElementById('pmR')?.value||'Banned by admin'})}
-else if(a==='unban'){await pAct('unban',p)}
-else if(a==='op'){await pAct('op',p)}
-else if(a==='deop'){await pAct('deop',p)}
-else if(a==='wl-add'){const r=await $a('/whitelist','POST',{action:'add',player:p});r?.success?nt(r.message,'ok'):nt('Failed','er')}
-else if(a==='wl-rm'){const r=await $a('/whitelist','POST',{action:'remove',player:p});r?.success?nt(r.message,'ok'):nt('Failed','er')}
-else if(a==='gm'){const m=document.getElementById('pmM')?.value||'survival';const r=await $a('/gamemode','POST',{player:p,mode:m});r?.success?nt(r.message,'ok'):nt('Failed','er')}
-else if(a==='tp'){const t=document.getElementById('pmT')?.value.trim();if(!t){nt('Enter target','er');return}const r=await $a('/tp','POST',{player:p,target:t});r?.success?nt(r.message,'ok'):nt('Failed','er')}
+  const p=document.getElementById('pmP')?.value.trim();if(!p){nt('Enter player name','er');return}
+  clMo();
+  if(a==='kick'){await pAct('kick',p,{reason:document.getElementById('pmR')?.value||'Kicked by admin'})}
+  else if(a==='ban'){await pAct('ban',p,{reason:document.getElementById('pmR')?.value||'Banned by admin'})}
+  else if(a==='unban'){await pAct('unban',p)}
+  else if(a==='op'){await pAct('op',p)}
+  else if(a==='deop'){await pAct('deop',p)}
+  else if(a==='wl-add'){const r=await $a('/whitelist','POST',{action:'add',player:p});r?.success?nt(r.message,'ok'):nt('Failed','er')}
+  else if(a==='wl-rm'){const r=await $a('/whitelist','POST',{action:'remove',player:p});r?.success?nt(r.message,'ok'):nt('Failed','er')}
+  else if(a==='gm'){const m=document.getElementById('pmM')?.value||'survival';const r=await $a('/gamemode','POST',{player:p,mode:m});r?.success?nt(r.message,'ok'):nt('Failed','er')}
+  else if(a==='tp'){const t=document.getElementById('pmT')?.value.trim();if(!t){nt('Enter target','er');return}const r=await $a('/tp','POST',{player:p,target:t});r?.success?nt(r.message,'ok'):nt('Failed','er')}
 }
 
 /* broadcast modal */
 function openSayModal(){
-const box=document.getElementById('moBox');
-box.innerHTML=`<h3>Broadcast Message</h3><p>Send a message to all players.</p><input class="mo-f" id="sayI" placeholder="Type message..."><div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="sendSay()">Send</button></div>`;
-document.getElementById('moBg').classList.add('on');
-setTimeout(()=>document.getElementById('sayI').focus(),100);
+  const box=document.getElementById('moBox');
+  box.innerHTML=`<h3>Broadcast Message</h3><p>Send a message to all players.</p><input class="mo-f" id="sayI" placeholder="Type message..."><div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="sendSay()">Send</button></div>`;
+  document.getElementById('moBg').classList.add('on');
+  setTimeout(()=>document.getElementById('sayI').focus(),100);
 }
 
 async function sendSay(){
-const m=document.getElementById('sayI')?.value.trim();if(!m){nt('Enter a message','er');return}
-clMo();const r=await $a('/say','POST',{message:m});r?.success?nt(r.message,'ok'):nt('Failed','er');
+  const m=document.getElementById('sayI')?.value.trim();if(!m){nt('Enter a message','er');return}
+  clMo();const r=await $a('/say','POST',{message:m});r?.success?nt(r.message,'ok'):nt('Failed','er');
 }
 
 /* generic modal */
 function openMo(t,v,a,x){
-const box=document.getElementById('moBox');
-box.innerHTML=`<h3>${t}</h3><p>Enter a name below.</p><input class="mo-f" id="moI" placeholder="Enter name..." value="${v||''}" onkeydown="if(event.key==='Enter')cfmMo()"><div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="cfmMo()">Confirm</button></div>`;
-document.getElementById('moBg').classList.add('on');
-moMeta={a,x};
-setTimeout(()=>document.getElementById('moI').focus(),100);
+  const box=document.getElementById('moBox');
+  box.innerHTML=`<h3>${t}</h3><p>Enter a name below.</p><input class="mo-f" id="moI" placeholder="Enter name..." value="${v||''}" onkeydown="if(event.key==='Enter')cfmMo()"><div class="mo-act"><button class="btn" onclick="clMo()">Cancel</button><button class="btn btn-ac" onclick="cfmMo()">Confirm</button></div>`;
+  document.getElementById('moBg').classList.add('on');
+  moMeta={a,x};
+  setTimeout(()=>document.getElementById('moI').focus(),100);
 }
 
 function clMo(){document.getElementById('moBg').classList.remove('on')}
 
 async function cfmMo(){
-const v=document.getElementById('moI')?.value.trim();if(!v)return;clMo();
-if(moMeta.a==='mkfile'){const p=(cDir==='/'?'':cDir)+'/'+v;const r=await $a('/file/create','POST',{path:p,content:''});r?.success?(nt('Created','ok'),lDir(cDir)):nt('Failed','er')}
-else if(moMeta.a==='mkdir'){const p=(cDir==='/'?'':cDir)+'/'+v;const r=await $a('/file/mkdir','POST',{path:p});r?.success?(nt('Created','ok'),lDir(cDir)):nt('Failed','er')}
-else if(moMeta.a==='rename'){const o=moMeta.x;const d=o.substring(0,o.lastIndexOf('/'));const r=await $a('/file/rename','POST',{old_path:o,new_path:d+'/'+v});r?.success?(nt('Renamed','ok'),lDir(cDir)):nt('Failed','er')}
+  const v=document.getElementById('moI')?.value.trim();if(!v)return;clMo();
+  if(moMeta.a==='mkfile'){const p=(cDir==='/'?'':cDir)+'/'+v;const r=await $a('/file/create','POST',{path:p,content:''});r?.success?(nt('Created','ok'),lDir(cDir)):nt('Failed','er')}
+  else if(moMeta.a==='mkdir'){const p=(cDir==='/'?'':cDir)+'/'+v;const r=await $a('/file/mkdir','POST',{path:p});r?.success?(nt('Created','ok'),lDir(cDir)):nt('Failed','er')}
+  else if(moMeta.a==='rename'){const o=moMeta.x;const d=o.substring(0,o.lastIndexOf('/'));const r=await $a('/file/rename','POST',{old_path:o,new_path:d+'/'+v});r?.success?(nt('Renamed','ok'),lDir(cDir)):nt('Failed','er')}
 }
 
 /* init */
