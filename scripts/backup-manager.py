@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
+import subprocess
 from huggingface_hub import HfApi, hf_hub_download
 from datetime import datetime
 
@@ -9,7 +10,7 @@ token = os.environ.get('HF_TOKEN')
 repo_id = os.environ.get('HF_DATASET_REPO')
 
 def download_backup():
-    """Download backup from HuggingFace"""
+    """Download backup from HuggingFace (server data + panel database)"""
     print("📥 Downloading backup from HuggingFace...")
     
     try:
@@ -21,6 +22,18 @@ def download_backup():
             local_dir="."
         )
         print(f"✅ Backup downloaded: {filepath}")
+        
+        # Extract backup - includes server data + panel.db
+        print("📦 Extracting backup...")
+        result = subprocess.run(
+            ["tar", "-xzf", "server-backup.tar.gz"],
+            capture_output=True, text=True, timeout=120
+        )
+        if result.returncode == 0:
+            print("✅ Backup extracted successfully")
+        else:
+            print(f"⚠️ Extraction warning: {result.stderr}")
+        
         return True
     except Exception as e:
         print(f"⚠️ No backup found: {e}")
@@ -28,41 +41,55 @@ def download_backup():
         return False
 
 def upload_backup():
-    """Create and upload backup to HuggingFace"""
+    """Create and upload backup to HuggingFace (server data + panel database)"""
     print("📦 Creating backup archive...")
     
-    # Create backup
+    # Create backup including server data AND panel database
+    # This ensures users, servers, schedules, and permissions persist across restarts
     os.chdir("minecraft-server")
-    os.system("""
-        tar -czf ../server-backup-new.tar.gz \
-            --exclude='*.jar' \
-            --exclude='logs/*' \
-            --exclude='cache/*' \
-            world/ \
-            world_nether/ \
-            world_the_end/ \
-            plugins/*/config.yml \
-            server.properties \
-            bukkit.yml \
-            spigot.yml \
-            config/ \
-            ops.json \
-            whitelist.json \
-            banned-players.json \
-            banned-ips.json \
-            usercache.json \
-            permissions.yml 2>/dev/null || true
-    """)
+    result = subprocess.run(
+        ["tar", "-czf", "../server-backup-new.tar.gz",
+            "--exclude=*.jar",
+            "--exclude=logs/*",
+            "--exclude=cache/*",
+            "world/",
+            "world_nether/",
+            "world_the_end/",
+            "plugins/*/config.yml",
+            "server.properties",
+            "bukkit.yml",
+            "spigot.yml",
+            "config/",
+            "ops.json",
+            "whitelist.json",
+            "banned-players.json",
+            "banned-ips.json",
+            "usercache.json",
+            "permissions.yml",
+            "../scripts/panel/panel.db",
+            "../scripts/panel/schedules.json"],
+        capture_output=True, text=True, timeout=300
+    )
     os.chdir("..")
+    
+    if result.returncode != 0:
+        print(f"⚠️ Backup warning (some files may be missing): {result.stderr}")
+    
+    # Check backup was created
+    if not os.path.exists("server-backup-new.tar.gz"):
+        print("❌ Failed to create backup archive")
+        return False
     
     # Get backup size
     size = os.path.getsize("server-backup-new.tar.gz")
     size_mb = size / (1024 * 1024)
     print(f"✅ Backup created: {size_mb:.2f} MB")
     
-    # Save size to env
-    with open(os.environ['GITHUB_ENV'], 'a') as f:
-        f.write(f"BACKUP_SIZE={size_mb:.1f}M\n")
+    # Save size to env if available
+    github_env = os.environ.get('GITHUB_ENV')
+    if github_env:
+        with open(github_env, 'a') as f:
+            f.write(f"BACKUP_SIZE={size_mb:.1f}M\n")
     
     # Upload to HuggingFace
     print("📤 Uploading to HuggingFace...")
