@@ -1,540 +1,1219 @@
 #!/usr/bin/env python3
+"""MCPanel - Minecraft Server Management Panel Backend"""
 
-from http.server import HTTPServer, SimpleHTTPRequestHandler
 import json
-import subprocess
 import os
 import shutil
-import urllib.parse
+import subprocess
+import sys
 import time
+import threading
+import urllib.parse
+import math
+import secrets
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from datetime import datetime
 
-SERVER_DIR = os.path.abspath("minecraft-server")
+# ── Configuration ──
 PANEL_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_DIR = os.path.abspath(os.path.join(PANEL_DIR, "..", ".."))
+SERVER_DIR = os.path.abspath(os.path.join(PROJECT_DIR, "minecraft-server"))
+HTML_FILE = os.path.join(PANEL_DIR, "index.html")
+SCREEN_NAME = "minecraft"
+PANEL_PASSWORD = os.environ.get("PANEL_PASSWORD", "admin123")
+PANEL_PORT = int(os.environ.get("PANEL_PORT", "8080"))
+SCHEDULES_FILE = os.path.join(PANEL_DIR, "schedules.json")
 
-# ✅ NEW: Configure your Cloudflare domains here
-FRONTEND_DOMAIN = "https://panel.projectxglory.qzz.io"
-API_DOMAIN = "https://wings.projectxglory.qzz.io"
+# ── Auth tokens ──
+valid_tokens = set()
+token_lock = threading.Lock()
 
-class PanelHandler(SimpleHTTPRequestHandler):
+# ── Schedule runner state ──
+schedule_running = True
+last_runs = {}
+
+def get_dir_size(path):
+    """Calculate total size of a directory."""
+    total = 0
+    if not os.path.exists(path):
+        return 0
+    for dirpath, dirnames, filenames in os.walk(path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            try:
+                total += os.path.getsize(fp)
+            except OSError:
+                pass
+    return total
+
+def format_bytes(b):
+    """Format bytes to human-readable string."""
+    if not b:
+        return "0 B"
+    units = ["B", "KB", "MB", "GB"]
+    i = int(math.floor(math.log(b, 1024)))
+    if i >= len(units):
+        i = len(units) - 1
+    return f"{b / (1024 ** i):.1f} {units[i]}"
+
+def send_screen_cmd(cmd):
+    """Send a command to the Minecraft server via screen."""
+    try:
+        subprocess.run(
+            ["screen", "-S", SCREEN_NAME, "-X", "stuff", f"{cmd}\r"],
+            capture_output=True, timeout=5
+        )
+        return True
+    except Exception:
+        return False
+
+def is_server_running():
+    """Check if the Minecraft server screen session is running."""
+    try:
+        result = subprocess.run(
+            ["screen", "-list"], capture_output=True, text=True, timeout=5
+        )
+        return SCREEN_NAME in result.stdout
+    except Exception:
+        return False
+
+def get_server_uptime():
+    """Get server uptime by checking the screen session's elapsed time."""
+    try:
+        result = subprocess.run(
+            ["screen", "-list"], capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.split("\n"):
+            if SCREEN_NAME in line:
+                parts = line.split("\t")
+                if len(parts) >= 2:
+                    time_str = parts[-1].strip().strip("()")
+                    return time_str if time_str else None
+        return None
+    except Exception:
+        return None
+
+def get_tps():
+    """Estimate TPS from server or return 20 if server is not running."""
+    if not is_server_running():
+        return 20.0
+    try:
+        # Try to read from a tps plugin output or estimate
+        # Send tps command and check logs
+        log_file = os.path.join(SERVER_DIR, "logs", "latest.log")
+        if os.path.exists(log_file):
+            # Try reading tps from recent log lines
+            result = subprocess.run(
+                ["tail", "-100", log_file],
+                capture_output=True, text=True, timeout=5
+            )
+            for line in reversed(result.stdout.split("\n")):
+                if "TPS from last" in line or "tps" in line.lower():
+                    try:
+                        # Parse formats like "TPS from last 1m, 5m, 15m: 20.0, 20.0, 20.0"
+                        parts = line.split(":")
+                        if len(parts) >= 2:
+                            nums = parts[-1].strip().split(",")
+                            if nums:
+                                val = float(nums[0].strip())
+                                return round(val, 1)
+                    except (ValueError, IndexError):
+                        pass
+        # If no TPS data available, estimate from CPU
+        try:
+            cpu = get_cpu_usage()
+            if cpu < 50:
+                return 20.0
+            elif cpu < 80:
+                return 19.5
+            else:
+                return max(10.0, 20.0 - (cpu - 50) * 0.3)
+        except Exception:
+            return 20.0
+    except Exception:
+        return 20.0
+
+def get_cpu_usage():
+    """Get CPU usage percentage."""
+    try:
+        result = subprocess.run(
+            ["top", "-bn1"], capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.split("\n"):
+            if "%Cpu(s):" in line:
+                parts = line.split(",")
+                for p in parts:
+                    p = p.strip()
+                    if p.endswith("id"):
+                        idle = float(p.replace("id", "").strip())
+                        return round(100.0 - idle, 1)
+        return 0.0
+    except Exception:
+        return 0.0
+
+def get_ram_usage():
+    """Get RAM usage of Java/Minecraft process."""
+    try:
+        # Get Java process RAM
+        result = subprocess.run(
+            ["ps", "aux"], capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.split("\n"):
+            if "java" in line and "paper" in line.lower():
+                parts = line.split()
+                if len(parts) >= 6:
+                    rss_mb = int(parts[5]) / 1024
+                    return round(rss_mb)
+        return 0
+    except Exception:
+        return 0
+
+def get_ram_total():
+    """Get total system RAM in MB."""
+    try:
+        result = subprocess.run(
+            ["free", "-m"], capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.split("\n"):
+            if line.startswith("Mem:"):
+                parts = line.split()
+                return int(parts[1])
+        return 4096
+    except Exception:
+        return 4096
+
+def get_disk_usage():
+    """Get disk usage of SERVER_DIR."""
+    try:
+        total, used, free = shutil.disk_usage(SERVER_DIR)
+        return round(used / (1024 ** 3), 2), round(total / (1024 ** 3), 2)
+    except Exception:
+        return 0.0, 100.0
+
+def get_java_version():
+    """Get Java version."""
+    try:
+        result = subprocess.run(
+            ["java", "-version"], capture_output=True, text=True, timeout=5
+        )
+        return result.stderr.split("\n")[0].strip() if result.stderr else "Unknown"
+    except Exception:
+        return "Not found"
+
+def get_online_players():
+    """Parse online players from server logs."""
+    players = []
+    try:
+        log_file = os.path.join(SERVER_DIR, "logs", "latest.log")
+        if not os.path.exists(log_file):
+            return players
+        result = subprocess.run(
+            ["tail", "-200", log_file],
+            capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.split("\n"):
+            if "joined the game" in line:
+                # Extract player name: [HH:MM:SS] PlayerName joined the game
+                try:
+                    name = line.split("]: ")[1].split(" joined")[0].strip()
+                    # Remove any color codes
+                    for code in ["\u00a7" + c for c in "0123456789abcdefklmnor"]:
+                        name = name.replace(code, "")
+                    name = name.split("\u00a7")[0].strip()
+                    if name and name not in players:
+                        players.append(name)
+                except (IndexError, AttributeError):
+                    pass
+            if "left the game" in line:
+                try:
+                    name = line.split("]: ")[1].split(" left")[0].strip()
+                    for code in ["\u00a7" + c for c in "0123456789abcdefklmnor"]:
+                        name = name.replace(code, "")
+                    name = name.split("\u00a7")[0].strip()
+                    if name in players:
+                        players.remove(name)
+                except (IndexError, AttributeError):
+                    pass
+    except Exception:
+        pass
+    return players
+
+def get_stats():
+    """Parse server statistics from logs."""
+    stats = {"total_joins": 0, "deaths": 0, "advancements": 0, "chat_messages": 0}
+    try:
+        log_file = os.path.join(SERVER_DIR, "logs", "latest.log")
+        if not os.path.exists(log_file):
+            return stats
+        # Use grep for efficiency
+        for pattern, key in [
+            ("joined the game", "total_joins"),
+            ("death.message.", "deaths"),
+            ("has made the advancement", "advancements"),
+            ("<", "chat_messages"),
+        ]:
+            try:
+                result = subprocess.run(
+                    ["grep", "-c", pattern, log_file],
+                    capture_output=True, text=True, timeout=10
+                )
+                stats[key] = int(result.stdout.strip() or 0)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return stats
+
+def read_properties():
+    """Read server.properties file."""
+    props = {}
+    prop_file = os.path.join(SERVER_DIR, "server.properties")
+    if not os.path.exists(prop_file):
+        return props
+    try:
+        with open(prop_file, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    key, val = line.split("=", 1)
+                    props[key.strip()] = val.strip()
+    except Exception:
+        pass
+    return props
+
+def save_properties(props):
+    """Save server.properties file."""
+    prop_file = os.path.join(SERVER_DIR, "server.properties")
+    try:
+        lines = [f"{k}={v}" for k, v in props.items()]
+        with open(prop_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        return True
+    except Exception as e:
+        return False
+
+def get_console_logs(lines=200):
+    """Get recent console output from server log."""
+    log_file = os.path.join(SERVER_DIR, "logs", "latest.log")
+    if not os.path.exists(log_file):
+        return "No log file found."
+    try:
+        result = subprocess.run(
+            ["tail", f"-{lines}", log_file],
+            capture_output=True, text=True, timeout=10
+        )
+        return result.stdout
+    except Exception:
+        return "Error reading log file."
+
+def load_schedules():
+    """Load schedules from JSON file."""
+    if os.path.exists(SCHEDULES_FILE):
+        try:
+            with open(SCHEDULES_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+def save_schedules(schedules):
+    """Save schedules to JSON file."""
+    with open(SCHEDULES_FILE, "w") as f:
+        json.dump(schedules, f, indent=2)
+
+def schedule_runner():
+    """Background thread that runs scheduled tasks."""
+    global schedule_running
+    while schedule_running:
+        schedules = load_schedules()
+        now = time.time()
+        for task in schedules:
+            if not task.get("enabled", False):
+                continue
+            name = task.get("name", "")
+            interval = task.get("interval_seconds", 300)
+            last = last_runs.get(name, 0)
+            if now - last >= interval:
+                cmd = task.get("command", "")
+                if cmd:
+                    print(f"[Schedule] Running '{name}': {cmd}")
+                    send_screen_cmd(cmd)
+                    last_runs[name] = now
+        time.sleep(10)
+
+def get_server_version():
+    """Extract server version from logs."""
+    try:
+        log_file = os.path.join(SERVER_DIR, "logs", "latest.log")
+        if os.path.exists(log_file):
+            result = subprocess.run(
+                ["head", "-50", log_file],
+                capture_output=True, text=True, timeout=5
+            )
+            for line in result.stdout.split("\n"):
+                if "version" in line.lower() and ("minecraft" in line.lower() or "paper" in line.lower() or "running" in line.lower()):
+                    return line.strip()
+            for line in result.stdout.split("\n"):
+                if "Paper" in line or "Minecraft" in line or "mc" in line.lower():
+                    return line.strip()
+    except Exception:
+        pass
+    return "Unknown"
+
+def get_paper_version():
+    """Try to detect Paper version from jar file."""
+    try:
+        for f in os.listdir(SERVER_DIR):
+            if f.startswith("paper") and f.endswith(".jar"):
+                # Extract version from filename like paper-1.20.4-476.jar
+                parts = f.replace("paper", "").replace(".jar", "").split("-")
+                if len(parts) >= 2:
+                    return f"Paper {parts[1]} (MC {parts[0].lstrip('-')})"
+                return f
+        return "Not found"
+    except Exception:
+        return "Unknown"
+
+def get_world_sizes():
+    """Get sizes of world directories."""
+    worlds = {}
+    for name in ["world", "world_nether", "world_the_end"]:
+        path = os.path.join(SERVER_DIR, name)
+        if os.path.exists(path):
+            worlds[name] = format_bytes(get_dir_size(path))
+        else:
+            worlds[name] = "N/A"
+    return worlds
+
+def get_installed_plugins():
+    """Get list of installed plugins."""
+    plugins_dir = os.path.join(SERVER_DIR, "plugins")
+    if not os.path.exists(plugins_dir):
+        return []
+    plugins = []
+    for f in os.listdir(plugins_dir):
+        if f.endswith(".jar"):
+            plugins.append(f.replace(".jar", ""))
+    return sorted(plugins)
+
+
+# ── HTTP Handler ──
+class PanelHandler(BaseHTTPRequestHandler):
+
+    def log_message(self, format, *args):
+        """Override to reduce log noise."""
+        pass
+
+    def send_json(self, data, status=200):
+        """Send a JSON response."""
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Access-Control-Allow-Methods", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
+
+    def send_html(self, content, status=200):
+        """Send HTML response."""
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(content.encode())
+
+    def read_body(self):
+        """Read and parse JSON request body."""
+        length = int(self.headers.get("Content-Length", 0))
+        if not length:
+            return None
+        try:
+            return json.loads(self.rfile.read(length))
+        except Exception:
+            return None
+
+    def check_auth(self):
+        """Check Bearer token authentication. Returns True if valid."""
+        auth = self.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[7:]
+            with token_lock:
+                if token in valid_tokens:
+                    return True
+        return False
+
+    def do_OPTIONS(self):
+        """Handle CORS preflight requests."""
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Access-Control-Allow-Methods", "*")
+        self.end_headers()
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
-        params = urllib.parse.parse_qs(parsed.query)
+        query = urllib.parse.parse_qs(parsed.query)
 
+        # Serve HTML
         if path == "/" or path == "/index.html":
-            self.serve_file(os.path.join(PANEL_DIR, "index.html"), "text/html")
+            html_path = os.path.join(PANEL_DIR, "index.html")
+            if os.path.exists(html_path):
+                with open(html_path, "r", encoding="utf-8") as f:
+                    self.send_html(f.read())
+            else:
+                self.send_html("<h1>MCPanel - index.html not found</h1>", 404)
             return
 
-        routes = {
-            "/api/status": lambda: self.handle_status(),
-            "/api/console": lambda: self.handle_console(),
-            "/api/players": lambda: self.handle_players(),
-            "/api/stats": lambda: self.handle_stats(),
-            "/api/properties": lambda: self.handle_get_properties(),
-            "/api/ops": lambda: self.handle_ops_list(),
-            "/api/banned": lambda: self.handle_banned_list(),
-        }
+        # Auth endpoints (no token needed)
+        if path == "/api/auth/login":
+            self.send_json({"error": "Use POST for login"})
+            return
 
-        if path in routes:
-            routes[path]()
+        # All other API endpoints require auth
+        if not self.check_auth():
+            self.send_json({"error": "Unauthorized"}, 401)
+            return
+
+        # Route API requests
+        if path == "/api/status":
+            self.handle_status()
+        elif path == "/api/console":
+            lines = int(query.get("lines", ["200"])[0])
+            self.handle_console(lines)
+        elif path == "/api/players":
+            self.handle_players()
+        elif path == "/api/stats":
+            self.handle_stats()
         elif path == "/api/files":
-            self.handle_files(params.get("path", ["/"])[0])
+            file_path = query.get("path", ["/"])[0]
+            self.handle_files(file_path)
         elif path == "/api/file/read":
-            self.handle_read_file(params.get("path", [""])[0])
+            file_path = query.get("path", [""])[0]
+            self.handle_file_read(file_path)
         elif path == "/api/file/download":
-            self.handle_download(params.get("path", [""])[0])
+            file_path = query.get("path", [""])[0]
+            self.handle_file_download(file_path)
+        elif path == "/api/properties":
+            self.handle_properties()
+        elif path == "/api/ops":
+            self.handle_ops()
+        elif path == "/api/banned":
+            self.handle_banned()
+        elif path == "/api/plugins":
+            self.handle_plugins()
+        elif path == "/api/schedules":
+            self.handle_schedules()
+        elif path == "/api/logs":
+            search = query.get("search", [""])[0]
+            lines = int(query.get("lines", ["200"])[0])
+            self.handle_logs(search, lines)
+        elif path == "/api/server-info":
+            self.handle_server_info()
         else:
-            self.send_error(404)
+            self.send_json({"error": "Not found"}, 404)
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
 
-        if path == "/api/file/upload":
-            self.handle_upload()
+        # Auth login endpoint (no token needed)
+        if path == "/api/auth/login":
+            self.handle_login()
             return
 
-        content_length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
+        # All other API endpoints require auth
+        if not self.check_auth():
+            self.send_json({"error": "Unauthorized"}, 401)
+            return
 
-        try:
-            data = json.loads(body) if body else {}
-        except json.JSONDecodeError:
-            data = {}
-
-        routes = {
-            "/api/command": lambda: self.handle_command(data),
-            "/api/start": lambda: self.handle_start(),
-            "/api/stop": lambda: self.handle_stop(),
-            "/api/restart": lambda: self.handle_restart(),
-            "/api/backup": lambda: self.handle_backup(),
-            "/api/file/save": lambda: self.handle_save_file(data),
-            "/api/file/delete": lambda: self.handle_delete_file(data),
-            "/api/file/create": lambda: self.handle_create_file(data),
-            "/api/file/mkdir": lambda: self.handle_mkdir(data),
-            "/api/file/rename": lambda: self.handle_rename_file(data),
-            "/api/properties": lambda: self.handle_save_properties(data),
-            "/api/kick": lambda: self.handle_kick(data),
-            "/api/ban": lambda: self.handle_ban(data),
-            "/api/unban": lambda: self.handle_unban(data),
-            "/api/op": lambda: self.handle_op(data),
-            "/api/deop": lambda: self.handle_deop(data),
-            "/api/whitelist": lambda: self.handle_whitelist(data),
-            "/api/gamemode": lambda: self.handle_gamemode(data),
-            "/api/tp": lambda: self.handle_tp(data),
-            "/api/say": lambda: self.handle_say(data),
-        }
-
-        if path in routes:
-            routes[path]()
+        if path == "/api/command":
+            self.handle_command()
+        elif path == "/api/start":
+            self.handle_start()
+        elif path == "/api/stop":
+            self.handle_stop()
+        elif path == "/api/restart":
+            self.handle_restart()
+        elif path == "/api/backup":
+            self.handle_backup()
+        elif path == "/api/say":
+            self.handle_say()
+        elif path == "/api/kick":
+            self.handle_kick()
+        elif path == "/api/ban":
+            self.handle_ban_player()
+        elif path == "/api/unban":
+            self.handle_unban()
+        elif path == "/api/op":
+            self.handle_op()
+        elif path == "/api/deop":
+            self.handle_deop()
+        elif path == "/api/whitelist":
+            self.handle_whitelist()
+        elif path == "/api/gamemode":
+            self.handle_gamemode()
+        elif path == "/api/tp":
+            self.handle_tp()
+        elif path == "/api/properties":
+            self.handle_save_properties()
+        elif path == "/api/file/save":
+            self.handle_file_save()
+        elif path == "/api/file/create":
+            self.handle_file_create()
+        elif path == "/api/file/mkdir":
+            self.handle_file_mkdir()
+        elif path == "/api/file/delete":
+            self.handle_file_delete()
+        elif path == "/api/file/rename":
+            self.handle_file_rename()
+        elif path == "/api/file/upload":
+            self.handle_file_upload()
+        elif path == "/api/plugins/delete":
+            self.handle_plugin_delete()
+        elif path == "/api/schedules":
+            self.handle_schedule_create()
+        elif path == "/api/schedules/delete":
+            self.handle_schedule_delete()
+        elif path == "/api/schedules/toggle":
+            self.handle_schedule_toggle()
         else:
-            self.send_error(404)
+            self.send_json({"error": "Not found"}, 404)
 
-    # ✅ UPDATED: Enhanced send_json with CORS headers
-    def send_json(self, data, status=200):
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        # ✅ NEW: Specific Cloudflare domain CORS
-        self.send_header("Access-Control-Allow-Origin", FRONTEND_DOMAIN)
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.send_header("Access-Control-Max-Age", "3600")
-        self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
+    # ── Auth ──
+    def handle_login(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"error": "Missing request body"}, 400)
+            return
+        password = body.get("password", "")
+        if password == PANEL_PASSWORD:
+            token = secrets.token_hex(32)
+            with token_lock:
+                valid_tokens.add(token)
+            self.send_json({"success": True, "token": token})
+        else:
+            self.send_json({"success": False, "error": "Invalid password"}, 401)
 
-    def serve_file(self, filepath, content_type):
-        try:
-            with open(filepath, "rb") as f:
-                content = f.read()
-            self.send_response(200)
-            self.send_header("Content-Type", content_type)
-            self.end_headers()
-            self.wfile.write(content)
-        except FileNotFoundError:
-            self.send_error(404)
-
-    def mc_cmd(self, cmd):
-        subprocess.run(
-            ["screen", "-S", "minecraft", "-X", "stuff", f"{cmd}\r"],
-            capture_output=True,
-        )
-
-    # ── server controls ──
-
+    # ── Status ──
     def handle_status(self):
-        result = subprocess.run(["screen", "-list"], capture_output=True, text=True)
-        running = "minecraft" in result.stdout
-
-        uptime = "N/A"
-        if running:
-            try:
-                pr = subprocess.run(["pgrep", "-f", "paper.jar"], capture_output=True, text=True)
-                if pr.stdout.strip():
-                    pid = pr.stdout.strip().split("\n")[0]
-                    et = subprocess.run(["ps", "-p", pid, "-o", "etime="], capture_output=True, text=True)
-                    uptime = et.stdout.strip()
-            except Exception:
-                pass
-
-        disk = shutil.disk_usage(SERVER_DIR)
-
-        ram_total = ram_used = 0
-        try:
-            mr = subprocess.run(["free", "-m"], capture_output=True, text=True)
-            parts = mr.stdout.strip().split("\n")[1].split()
-            ram_total = int(parts[1])
-            ram_used = int(parts[2])
-        except Exception:
-            pass
-
-        cpu = 0
-        try:
-            cr = subprocess.run(["grep", "cpu ", "/proc/stat"], capture_output=True, text=True)
-            p = cr.stdout.split()
-            cpu = round((int(p[1]) + int(p[3])) / sum(int(x) for x in p[1:]) * 100, 1)
-        except Exception:
-            pass
-
+        running = is_server_running()
+        uptime = get_server_uptime() if running else None
+        tps = get_tps() if running else 0
+        ram_used = get_ram_usage()
+        ram_total = get_ram_total()
+        disk_used, disk_total = get_disk_usage()
         self.send_json({
             "running": running,
             "uptime": uptime,
-            "cpu": cpu,
+            "cpu": get_cpu_usage() if running else 0,
             "ram_used": ram_used,
             "ram_total": ram_total,
-            "disk_used": round(disk.used / (1024 ** 3), 2),
-            "disk_total": round(disk.total / (1024 ** 3), 2),
-            "java_version": subprocess.run(
-                ["java", "-version"], capture_output=True, text=True
-            ).stderr.split("\n")[0],
+            "disk_used": disk_used,
+            "disk_total": disk_total,
+            "java_version": get_java_version(),
+            "tps": tps,
         })
 
-    def handle_start(self):
-        r = subprocess.run(["screen", "-list"], capture_output=True, text=True)
-        if "minecraft" in r.stdout:
-            self.send_json({"success": False, "message": "Server already running"})
-            return
-        os.chdir(SERVER_DIR)
-        subprocess.Popen(["screen", "-dmS", "minecraft", "java", "-Xms6G", "-Xmx12G", "-jar", "paper.jar", "--nogui"])
-        os.chdir(PANEL_DIR)
-        self.send_json({"success": True, "message": "Server starting..."})
+    # ── Console ──
+    def handle_console(self, lines=200):
+        logs = get_console_logs(lines)
+        self.send_json({"logs": logs})
 
-    def handle_stop(self):
-        self.mc_cmd("stop")
-        self.send_json({"success": True, "message": "Server stopping..."})
-
-    def handle_restart(self):
-        self.mc_cmd("stop")
-        time.sleep(10)
-        os.chdir(SERVER_DIR)
-        subprocess.Popen(["screen", "-dmS", "minecraft", "java", "-Xms6G", "-Xmx12G", "-jar", "paper.jar", "--nogui"])
-        os.chdir(PANEL_DIR)
-        self.send_json({"success": True, "message": "Server restarting..."})
-
-    def handle_command(self, data):
-        cmd = data.get("command", "")
+    # ── Command ──
+    def handle_command(self):
+        body = self.read_body()
+        cmd = body.get("command", "") if body else ""
         if not cmd:
             self.send_json({"success": False, "message": "No command"})
             return
-        self.mc_cmd(cmd)
-        self.send_json({"success": True, "message": f"Sent: {cmd}"})
+        if send_screen_cmd(cmd):
+            self.send_json({"success": True, "message": f"Sent: {cmd}"})
+        else:
+            self.send_json({"success": False, "message": "Failed to send command"})
 
-    def handle_say(self, data):
-        msg = data.get("message", "")
-        if not msg:
-            self.send_json({"success": False, "message": "No message"})
-            return
-        self.mc_cmd(f"say {msg}")
-        self.send_json({"success": True, "message": f"Broadcast: {msg}"})
-
-    # ── console ──
-
-    def handle_console(self):
-        log = os.path.join(SERVER_DIR, "logs", "latest.log")
-        try:
-            with open(log, "r") as f:
-                lines = f.readlines()
-            self.send_json({"logs": "".join(lines[-150:])})
-        except FileNotFoundError:
-            self.send_json({"logs": "No log file found."})
-
-    # ── players ──
-
+    # ── Players ──
     def handle_players(self):
-        log = os.path.join(SERVER_DIR, "logs", "latest.log")
-        players = []
-        try:
-            with open(log, "r") as f:
-                for line in f:
-                    if "joined the game" in line:
-                        n = line.split("]: ")[1].split(" joined")[0].strip()
-                        if n not in players:
-                            players.append(n)
-                    if "left the game" in line:
-                        n = line.split("]: ")[1].split(" left")[0].strip()
-                        if n in players:
-                            players.remove(n)
-        except Exception:
-            pass
+        players = get_online_players()
         self.send_json({"players": players, "count": len(players)})
 
+    # ── Stats ──
     def handle_stats(self):
-        log = os.path.join(SERVER_DIR, "logs", "latest.log")
-        s = {"total_joins": 0, "total_leaves": 0, "deaths": 0, "advancements": 0, "chat_messages": 0}
-        try:
-            with open(log, "r") as f:
-                for line in f:
-                    if "joined the game" in line: s["total_joins"] += 1
-                    elif "left the game" in line: s["total_leaves"] += 1
-                    elif any(w in line for w in ["died", "was slain", "was killed", "was shot", "fell", "drowned", "burned", "blew up", "withered", "was squished"]): s["deaths"] += 1
-                    elif "has made the advancement" in line: s["advancements"] += 1
-                    elif "<" in line and ">" in line: s["chat_messages"] += 1
-        except Exception:
-            pass
-        self.send_json(s)
+        self.send_json(get_stats())
 
-    # ── player management ──
-
-    def handle_kick(self, d):
-        p = d.get("player", "")
-        r = d.get("reason", "Kicked by admin")
-        if not p: self.send_json({"success": False, "message": "No player"}); return
-        self.mc_cmd(f"kick {p} {r}")
-        self.send_json({"success": True, "message": f"Kicked {p}"})
-
-    def handle_ban(self, d):
-        p = d.get("player", "")
-        r = d.get("reason", "Banned by admin")
-        if not p: self.send_json({"success": False, "message": "No player"}); return
-        self.mc_cmd(f"ban {p} {r}")
-        self.send_json({"success": True, "message": f"Banned {p}"})
-
-    def handle_unban(self, d):
-        p = d.get("player", "")
-        if not p: self.send_json({"success": False, "message": "No player"}); return
-        self.mc_cmd(f"pardon {p}")
-        self.send_json({"success": True, "message": f"Unbanned {p}"})
-
-    def handle_op(self, d):
-        p = d.get("player", "")
-        if not p: self.send_json({"success": False, "message": "No player"}); return
-        self.mc_cmd(f"op {p}")
-        self.send_json({"success": True, "message": f"Opped {p}"})
-
-    def handle_deop(self, d):
-        p = d.get("player", "")
-        if not p: self.send_json({"success": False, "message": "No player"}); return
-        self.mc_cmd(f"deop {p}")
-        self.send_json({"success": True, "message": f"De-opped {p}"})
-
-    def handle_whitelist(self, d):
-        action = d.get("action", "")
-        p = d.get("player", "")
-        if action == "list":
-            wf = os.path.join(SERVER_DIR, "whitelist.json")
-            try:
-                with open(wf, "r") as f: wl = json.load(f)
-                self.send_json({"success": True, "whitelist": wl})
-            except Exception:
-                self.send_json({"success": True, "whitelist": []})
+    # ── Server Controls ──
+    def handle_start(self):
+        if is_server_running():
+            self.send_json({"success": False, "message": "Server is already running"})
             return
-        if not p: self.send_json({"success": False, "message": "No player"}); return
-        self.mc_cmd(f"whitelist {action} {p}")
-        self.send_json({"success": True, "message": f"Whitelist {action}: {p}"})
-
-    def handle_gamemode(self, d):
-        p = d.get("player", "")
-        m = d.get("mode", "survival")
-        if not p: self.send_json({"success": False, "message": "No player"}); return
-        self.mc_cmd(f"gamemode {m} {p}")
-        self.send_json({"success": True, "message": f"{p} → {m}"})
-
-    def handle_tp(self, d):
-        p = d.get("player", "")
-        t = d.get("target", "")
-        if not p or not t: self.send_json({"success": False, "message": "Missing fields"}); return
-        self.mc_cmd(f"tp {p} {t}")
-        self.send_json({"success": True, "message": f"Teleported {p} → {t}"})
-
-    def handle_ops_list(self):
-        f = os.path.join(SERVER_DIR, "ops.json")
         try:
-            with open(f, "r") as fh: data = json.load(fh)
-            self.send_json({"success": True, "ops": data})
-        except Exception:
-            self.send_json({"success": True, "ops": []})
-
-    def handle_banned_list(self):
-        f = os.path.join(SERVER_DIR, "banned-players.json")
-        try:
-            with open(f, "r") as fh: data = json.load(fh)
-            self.send_json({"success": True, "banned": data})
-        except Exception:
-            self.send_json({"success": True, "banned": []})
-
-    # ── files ──
-
-    def handle_files(self, dir_path):
-        full = os.path.abspath(os.path.join(SERVER_DIR, dir_path.lstrip("/")))
-        if not full.startswith(SERVER_DIR):
-            self.send_json({"error": "Access denied"}, 403); return
-        if not os.path.exists(full):
-            self.send_json({"error": "Not found"}, 404); return
-        files = []
-        try:
-            for item in sorted(os.listdir(full)):
-                ip = os.path.join(full, item)
-                isd = os.path.isdir(ip)
-                files.append({
-                    "name": item,
-                    "is_dir": isd,
-                    "size": 0 if isd else os.path.getsize(ip),
-                    "modified": time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(ip))),
-                    "path": os.path.relpath(ip, SERVER_DIR),
-                })
-        except PermissionError:
-            self.send_json({"error": "Permission denied"}, 403); return
-        self.send_json({"current_path": os.path.relpath(full, SERVER_DIR), "files": files})
-
-    def handle_read_file(self, fp):
-        full = os.path.abspath(os.path.join(SERVER_DIR, fp.lstrip("/")))
-        if not full.startswith(SERVER_DIR):
-            self.send_json({"error": "Access denied"}, 403); return
-        try:
-            if os.path.getsize(full) > 5 * 1024 * 1024:
-                self.send_json({"error": "File too large (>5MB)"}, 400); return
-            with open(full, "r", errors="replace") as f: content = f.read()
-            self.send_json({"content": content, "path": fp})
-        except FileNotFoundError:
-            self.send_json({"error": "Not found"}, 404)
-        except Exception as e:
-            self.send_json({"error": str(e)}, 500)
-
-    def handle_save_file(self, d):
-        fp = d.get("path", "")
-        content = d.get("content", "")
-        full = os.path.abspath(os.path.join(SERVER_DIR, fp.lstrip("/")))
-        if not full.startswith(SERVER_DIR):
-            self.send_json({"error": "Access denied"}, 403); return
-        try:
-            with open(full, "w") as f: f.write(content)
-            self.send_json({"success": True, "message": "Saved"})
+            os.chdir(SERVER_DIR)
+            subprocess.Popen(
+                ["screen", "-dmS", SCREEN_NAME, "java", "-Xms6G", "-Xmx12G",
+                 "-jar", "paper.jar", "--nogui"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            self.send_json({"success": True, "message": "Server starting..."})
         except Exception as e:
             self.send_json({"success": False, "message": str(e)})
 
-    def handle_delete_file(self, d):
-        fp = d.get("path", "")
-        full = os.path.abspath(os.path.join(SERVER_DIR, fp.lstrip("/")))
-        if not full.startswith(SERVER_DIR):
-            self.send_json({"error": "Access denied"}, 403); return
+    def handle_stop(self):
+        if not is_server_running():
+            self.send_json({"success": False, "message": "Server is not running"})
+            return
+        send_screen_cmd("stop")
+        self.send_json({"success": True, "message": "Stopping server..."})
+
+    def handle_restart(self):
+        if not is_server_running():
+            self.send_json({"success": False, "message": "Server is not running"})
+            return
+        send_screen_cmd("stop")
+        time.sleep(5)
         try:
-            if os.path.isdir(full): shutil.rmtree(full)
-            else: os.remove(full)
+            os.chdir(SERVER_DIR)
+            subprocess.Popen(
+                ["screen", "-dmS", SCREEN_NAME, "java", "-Xms6G", "-Xmx12G",
+                 "-jar", "paper.jar", "--nogui"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            self.send_json({"success": True, "message": "Server restarting..."})
+        except Exception as e:
+            self.send_json({"success": False, "message": str(e)})
+
+    def handle_backup(self):
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_name = f"backup_{timestamp}.tar.gz"
+            result = subprocess.run(
+                ["tar", "-czf", backup_name,
+                 "--exclude=logs", "--exclude=*.jar", "--exclude=cache",
+                 "world", "world_nether", "world_the_end",
+                 "server.properties", "ops.json", "whitelist.json",
+                 "banned-players.json", "banned-ips.json"],
+                capture_output=True, text=True, timeout=300, cwd=SERVER_DIR
+            )
+            backup_path = os.path.join(SERVER_DIR, backup_name)
+            size = os.path.getsize(backup_path) if os.path.exists(backup_path) else 0
+            self.send_json({"success": True, "message": f"Backup created: {backup_name} ({format_bytes(size)})"})
+        except Exception as e:
+            self.send_json({"success": False, "message": f"Backup failed: {str(e)}"})
+
+    def handle_say(self):
+        body = self.read_body()
+        msg = body.get("message", "") if body else ""
+        if not msg:
+            self.send_json({"success": False, "message": "No message"})
+            return
+        send_screen_cmd(f"say {msg}")
+        self.send_json({"success": True, "message": "Broadcast sent"})
+
+    # ── Player Actions ──
+    def handle_kick(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        player = body.get("player", "")
+        reason = body.get("reason", "Kicked by admin")
+        cmd = f"kick {player} {reason}"
+        send_screen_cmd(cmd)
+        self.send_json({"success": True, "message": f"Kicked {player}"})
+
+    def handle_ban_player(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        player = body.get("player", "")
+        reason = body.get("reason", "Banned by admin")
+        send_screen_cmd(f"ban {player} {reason}")
+        self.send_json({"success": True, "message": f"Banned {player}"})
+
+    def handle_unban(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        player = body.get("player", "")
+        send_screen_cmd(f"pardon {player}")
+        self.send_json({"success": True, "message": f"Unbanned {player}"})
+
+    def handle_op(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        player = body.get("player", "")
+        send_screen_cmd(f"op {player}")
+        self.send_json({"success": True, "message": f"Opped {player}"})
+
+    def handle_deop(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        player = body.get("player", "")
+        send_screen_cmd(f"deop {player}")
+        self.send_json({"success": True, "message": f"Deopped {player}"})
+
+    def handle_whitelist(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        action = body.get("action", "")
+        player = body.get("player", "")
+        if action == "add":
+            send_screen_cmd(f"whitelist add {player}")
+            self.send_json({"success": True, "message": f"Added {player} to whitelist"})
+        elif action == "remove":
+            send_screen_cmd(f"whitelist remove {player}")
+            self.send_json({"success": True, "message": f"Removed {player} from whitelist"})
+        else:
+            self.send_json({"success": False, "message": "Invalid action"})
+
+    def handle_gamemode(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        player = body.get("player", "")
+        mode = body.get("mode", "survival")
+        send_screen_cmd(f"gamemode {mode} {player}")
+        self.send_json({"success": True, "message": f"Set {player} to {mode}"})
+
+    def handle_tp(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        player = body.get("player", "")
+        target = body.get("target", "")
+        send_screen_cmd(f"tp {player} {target}")
+        self.send_json({"success": True, "message": f"Teleported {player}"})
+
+    # ── Properties ──
+    def handle_properties(self):
+        self.send_json({"properties": read_properties()})
+
+    def handle_save_properties(self):
+        body = self.read_body()
+        if not body or "properties" not in body:
+            self.send_json({"success": False, "message": "Missing properties"})
+            return
+        if save_properties(body["properties"]):
+            self.send_json({"success": True, "message": "Properties saved"})
+        else:
+            self.send_json({"success": False, "message": "Failed to save properties"})
+
+    # ── Ops & Banned ──
+    def handle_ops(self):
+        ops = []
+        ops_file = os.path.join(SERVER_DIR, "ops.json")
+        if os.path.exists(ops_file):
+            try:
+                with open(ops_file, "r") as f:
+                    data = json.load(f)
+                    ops = [entry.get("name", "") for entry in data if entry.get("name")]
+            except Exception:
+                pass
+        self.send_json({"ops": ops})
+
+    def handle_banned(self):
+        banned = []
+        ban_file = os.path.join(SERVER_DIR, "banned-players.json")
+        if os.path.exists(ban_file):
+            try:
+                with open(ban_file, "r") as f:
+                    data = json.load(f)
+                    banned = [{"name": e.get("name", ""), "reason": e.get("reason", "")} for e in data if e.get("name")]
+            except Exception:
+                pass
+        self.send_json({"banned": banned})
+
+    # ── File Manager ──
+    def _resolve_path(self, rel_path):
+        """Resolve a relative path to absolute path within SERVER_DIR."""
+        if not rel_path or rel_path == "/":
+            return SERVER_DIR
+        # Strip leading slash and join
+        clean = rel_path.lstrip("/")
+        return os.path.join(SERVER_DIR, clean)
+
+    def handle_files(self, rel_path):
+        abs_path = self._resolve_path(rel_path)
+        if not os.path.exists(abs_path) or not os.path.isdir(abs_path):
+            self.send_json({"error": "Directory not found"})
+            return
+        # Security check: ensure we're within SERVER_DIR
+        if not os.path.abspath(abs_path).startswith(SERVER_DIR):
+            self.send_json({"error": "Access denied"}, 403)
+            return
+
+        files = []
+        try:
+            for entry in sorted(os.listdir(abs_path)):
+                full = os.path.join(abs_path, entry)
+                rel = os.path.relpath(full, SERVER_DIR)
+                stat = os.stat(full)
+                files.append({
+                    "name": entry,
+                    "path": "/" + rel.replace(os.sep, "/"),
+                    "is_dir": os.path.isdir(full),
+                    "size": stat.st_size if not os.path.isdir(full) else 0,
+                    "modified": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                })
+        except PermissionError:
+            self.send_json({"error": "Permission denied"}, 403)
+            return
+        self.send_json({"files": files})
+
+    def handle_file_read(self, rel_path):
+        abs_path = self._resolve_path(rel_path)
+        if not os.path.abspath(abs_path).startswith(SERVER_DIR):
+            self.send_json({"error": "Access denied"}, 403)
+            return
+        if not os.path.exists(abs_path) or os.path.isdir(abs_path):
+            self.send_json({"error": "File not found"})
+            return
+        try:
+            with open(abs_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read(100000)  # Limit to 100KB
+            self.send_json({"content": content, "path": rel_path})
+        except Exception as e:
+            self.send_json({"error": str(e)})
+
+    def handle_file_download(self, rel_path):
+        abs_path = self._resolve_path(rel_path)
+        if not os.path.abspath(abs_path).startswith(SERVER_DIR):
+            self.send_json({"error": "Access denied"}, 403)
+            return
+        if not os.path.exists(abs_path):
+            self.send_json({"error": "File not found"})
+            return
+        try:
+            with open(abs_path, "rb") as f:
+                data = f.read(50 * 1024 * 1024)  # Max 50MB
+            filename = os.path.basename(abs_path)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except Exception as e:
+            self.send_json({"error": str(e)})
+
+    def handle_file_save(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        rel_path = body.get("path", "")
+        content = body.get("content", "")
+        abs_path = self._resolve_path(rel_path)
+        if not os.path.abspath(abs_path).startswith(SERVER_DIR):
+            self.send_json({"success": False, "message": "Access denied"})
+            return
+        try:
+            with open(abs_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            self.send_json({"success": True, "message": "File saved"})
+        except Exception as e:
+            self.send_json({"success": False, "message": str(e)})
+
+    def handle_file_create(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        rel_path = body.get("path", "")
+        content = body.get("content", "")
+        abs_path = self._resolve_path(rel_path)
+        if not os.path.abspath(abs_path).startswith(SERVER_DIR):
+            self.send_json({"success": False, "message": "Access denied"})
+            return
+        try:
+            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+            with open(abs_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            self.send_json({"success": True, "message": "File created"})
+        except Exception as e:
+            self.send_json({"success": False, "message": str(e)})
+
+    def handle_file_mkdir(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        rel_path = body.get("path", "")
+        abs_path = self._resolve_path(rel_path)
+        if not os.path.abspath(abs_path).startswith(SERVER_DIR):
+            self.send_json({"success": False, "message": "Access denied"})
+            return
+        try:
+            os.makedirs(abs_path, exist_ok=True)
+            self.send_json({"success": True, "message": "Directory created"})
+        except Exception as e:
+            self.send_json({"success": False, "message": str(e)})
+
+    def handle_file_delete(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        rel_path = body.get("path", "")
+        abs_path = self._resolve_path(rel_path)
+        if not os.path.abspath(abs_path).startswith(SERVER_DIR):
+            self.send_json({"success": False, "message": "Access denied"})
+            return
+        try:
+            if os.path.isdir(abs_path):
+                shutil.rmtree(abs_path)
+            else:
+                os.remove(abs_path)
             self.send_json({"success": True, "message": "Deleted"})
         except Exception as e:
             self.send_json({"success": False, "message": str(e)})
 
-    def handle_create_file(self, d):
-        fp = d.get("path", "")
-        content = d.get("content", "")
-        full = os.path.abspath(os.path.join(SERVER_DIR, fp.lstrip("/")))
-        if not full.startswith(SERVER_DIR):
-            self.send_json({"error": "Access denied"}, 403); return
+    def handle_file_rename(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        old_rel = body.get("old_path", "")
+        new_rel = body.get("new_path", "")
+        old_abs = self._resolve_path(old_rel)
+        new_abs = self._resolve_path(new_rel)
+        if not os.path.abspath(old_abs).startswith(SERVER_DIR):
+            self.send_json({"success": False, "message": "Access denied"})
+            return
+        if not os.path.abspath(new_abs).startswith(SERVER_DIR):
+            self.send_json({"success": False, "message": "Access denied"})
+            return
         try:
-            os.makedirs(os.path.dirname(full), exist_ok=True)
-            with open(full, "w") as f: f.write(content)
-            self.send_json({"success": True, "message": "Created"})
-        except Exception as e:
-            self.send_json({"success": False, "message": str(e)})
-
-    def handle_mkdir(self, d):
-        dp = d.get("path", "")
-        full = os.path.abspath(os.path.join(SERVER_DIR, dp.lstrip("/")))
-        if not full.startswith(SERVER_DIR):
-            self.send_json({"error": "Access denied"}, 403); return
-        try:
-            os.makedirs(full, exist_ok=True)
-            self.send_json({"success": True, "message": "Created"})
-        except Exception as e:
-            self.send_json({"success": False, "message": str(e)})
-
-    def handle_rename_file(self, d):
-        old = os.path.abspath(os.path.join(SERVER_DIR, d.get("old_path", "").lstrip("/")))
-        new = os.path.abspath(os.path.join(SERVER_DIR, d.get("new_path", "").lstrip("/")))
-        if not old.startswith(SERVER_DIR) or not new.startswith(SERVER_DIR):
-            self.send_json({"error": "Access denied"}, 403); return
-        try:
-            os.rename(old, new)
+            os.rename(old_abs, new_abs)
             self.send_json({"success": True, "message": "Renamed"})
         except Exception as e:
             self.send_json({"success": False, "message": str(e)})
 
-    def handle_download(self, fp):
-        full = os.path.abspath(os.path.join(SERVER_DIR, fp.lstrip("/")))
-        if not full.startswith(SERVER_DIR) or not os.path.isfile(full):
-            self.send_error(404); return
-        try:
-            sz = os.path.getsize(full)
-            fn = os.path.basename(full)
-            self.send_response(200)
-            self.send_header("Content-Type", "application/octet-stream")
-            self.send_header("Content-Disposition", f'attachment; filename="{fn}"')
-            self.send_header("Content-Length", str(sz))
-            self.end_headers()
-            with open(full, "rb") as f:
-                while True:
-                    chunk = f.read(8192)
-                    if not chunk: break
-                    self.wfile.write(chunk)
-        except Exception:
-            self.send_error(500)
+    def handle_file_upload(self):
+        content_type = self.headers.get("Content-Type", "")
+        if "multipart/form-data" not in content_type:
+            self.send_json({"success": False, "message": "Expected multipart form data"})
+            return
 
-    def handle_upload(self):
-        ct = self.headers.get("Content-Type", "")
-        if "multipart/form-data" not in ct:
-            self.send_json({"success": False, "message": "Invalid request"}); return
-        boundary = ct.split("boundary=")[1].encode()
-        cl = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(cl)
-        parts = body.split(b"--" + boundary)
-        upload_path = ""
-        file_data = b""
-        filename = ""
+        # Parse multipart manually (basic parser)
+        boundary = content_type.split("boundary=")[-1].strip()
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length).decode("utf-8", errors="replace")
+
+        # Extract target path and file data
+        upload_path = SERVER_DIR
+        file_data = None
+        file_name = None
+
+        parts = body.split(f"--{boundary}")
         for part in parts:
-            if b"Content-Disposition" not in part: continue
-            he = part.find(b"\r\n\r\n")
-            if he == -1: continue
-            hdr = part[:he].decode("utf-8", errors="replace")
-            dat = part[he + 4:]
-            if dat.endswith(b"\r\n"): dat = dat[:-2]
-            if 'name="path"' in hdr:
-                upload_path = dat.decode("utf-8").strip()
-            elif 'name="file"' in hdr:
-                for h in hdr.split("\r\n"):
-                    if "filename=" in h: filename = h.split('filename="')[1].split('"')[0]
-                file_data = dat
-        if not filename:
-            self.send_json({"success": False, "message": "No file"}); return
-        sd = os.path.abspath(os.path.join(SERVER_DIR, upload_path.lstrip("/")))
-        if not sd.startswith(SERVER_DIR):
-            self.send_json({"success": False, "message": "Access denied"}); return
-        os.makedirs(sd, exist_ok=True)
-        sp = os.path.join(sd, filename)
-        try:
-            with open(sp, "wb") as f: f.write(file_data)
-            mb = len(file_data) / (1024 * 1024)
-            self.send_json({"success": True, "message": f"Uploaded {filename} ({mb:.1f} MB)"})
-        except Exception as e:
-            self.send_json({"success": False, "message": str(e)})
+            if 'Content-Disposition' in part and "file" in part.split('name="')[1].split('"')[0]:
+                # Extract filename
+                if 'filename="' in part:
+                    file_name = part.split('filename="')[1].split('"')[0]
+                # Extract file content (after blank line)
+                if "\r\n\r\n" in part:
+                    file_data = part.split("\r\n\r\n", 1)[1]
+                    # Remove trailing boundary
+                    file_data = file_data.rsplit("\r\n", 1)[0]
+            elif 'Content-Disposition' in part and "path" in part:
+                if "\r\n\r\n" in part:
+                    path_val = part.split("\r\n\r\n", 1)[1].rsplit("\r\n", 1)[0].strip()
+                    if path_val and path_val != "/":
+                        upload_path = os.path.join(SERVER_DIR, path_val.lstrip("/"))
 
-    # ── properties ──
-
-    def handle_get_properties(self):
-        pf = os.path.join(SERVER_DIR, "server.properties")
-        props = {}
-        try:
-            with open(pf, "r") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        k, v = line.split("=", 1)
-                        props[k.strip()] = v.strip()
-            self.send_json({"properties": props})
-        except Exception:
-            self.send_json({"properties": {}})
-
-    def handle_save_properties(self, d):
-        props = d.get("properties", {})
-        pf = os.path.join(SERVER_DIR, "server.properties")
-        try:
-            with open(pf, "w") as f:
-                for k, v in props.items():
-                    f.write(f"{k}={v}\n")
-            self.send_json({"success": True, "message": "Saved. Restart to apply."})
-        except Exception as e:
-            self.send_json({"success": False, "message": str(e)})
-
-    # ── backup ──
-
-    def handle_backup(self):
-        self.mc_cmd("save-all")
-        time.sleep(5)
-        r = subprocess.run(
-            ["tar", "-czf", "backup-manual.tar.gz", "world/", "world_nether/", "world_the_end/", "server.properties", "plugins/"],
-            cwd=SERVER_DIR, capture_output=True, text=True,
-        )
-        if r.returncode == 0:
-            sz = os.path.getsize(os.path.join(SERVER_DIR, "backup-manual.tar.gz"))
-            self.send_json({"success": True, "message": f"Backup done ({sz / 1048576:.1f} MB)"})
+        if file_name and file_data:
+            try:
+                save_path = os.path.join(upload_path, file_name)
+                if not os.path.abspath(save_path).startswith(SERVER_DIR):
+                    self.send_json({"success": False, "message": "Access denied"})
+                    return
+                os.makedirs(upload_path, exist_ok=True)
+                with open(save_path, "wb") as f:
+                    f.write(file_data.encode("latin-1"))
+                self.send_json({"success": True, "message": f"Uploaded {file_name}"})
+            except Exception as e:
+                self.send_json({"success": False, "message": str(e)})
         else:
-            self.send_json({"success": False, "message": "Backup failed"})
+            self.send_json({"success": False, "message": "No file data"})
 
-    def log_message(self, fmt, *args):
-        pass
+    # ── Plugins ──
+    def handle_plugins(self):
+        plugins_dir = os.path.join(SERVER_DIR, "plugins")
+        plugins = []
+        if os.path.exists(plugins_dir):
+            for f in sorted(os.listdir(plugins_dir)):
+                if f.endswith(".jar"):
+                    fp = os.path.join(plugins_dir, f)
+                    stat = os.stat(fp)
+                    plugins.append({
+                        "name": f,
+                        "size": stat.st_size,
+                        "size_formatted": format_bytes(stat.st_size),
+                        "modified": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                    })
+        self.send_json({"plugins": plugins})
+
+    def handle_plugin_delete(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        name = body.get("name", "")
+        if not name:
+            self.send_json({"success": False, "message": "No plugin name"})
+            return
+        plugin_path = os.path.join(SERVER_DIR, "plugins", name)
+        if not os.path.exists(plugin_path):
+            self.send_json({"success": False, "message": "Plugin not found"})
+            return
+        try:
+            os.remove(plugin_path)
+            self.send_json({"success": True, "message": f"Deleted {name}"})
+        except Exception as e:
+            self.send_json({"success": False, "message": str(e)})
+
+    # ── Schedules ──
+    def handle_schedules(self):
+        schedules = load_schedules()
+        # Add last_run info
+        for s in schedules:
+            name = s.get("name", "")
+            if name in last_runs:
+                s["last_run"] = datetime.fromtimestamp(last_runs[name]).strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                s["last_run"] = "Never"
+        self.send_json({"schedules": schedules})
+
+    def handle_schedule_create(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        name = body.get("name", "").strip()
+        command = body.get("command", "").strip()
+        interval_minutes = int(body.get("interval_minutes", 5))
+        enabled = body.get("enabled", True)
+
+        if not name or not command:
+            self.send_json({"success": False, "message": "Name and command are required"})
+            return
+
+        schedules = load_schedules()
+        # Check for duplicate name
+        for s in schedules:
+            if s.get("name") == name:
+                self.send_json({"success": False, "message": "Task name already exists"})
+                return
+
+        schedules.append({
+            "name": name,
+            "command": command,
+            "interval_seconds": interval_minutes * 60,
+            "interval_minutes": interval_minutes,
+            "enabled": enabled,
+        })
+        save_schedules(schedules)
+        self.send_json({"success": True, "message": f"Created schedule: {name}"})
+
+    def handle_schedule_delete(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        name = body.get("name", "")
+        schedules = load_schedules()
+        schedules = [s for s in schedules if s.get("name") != name]
+        save_schedules(schedules)
+        if name in last_runs:
+            del last_runs[name]
+        self.send_json({"success": True, "message": f"Deleted schedule: {name}"})
+
+    def handle_schedule_toggle(self):
+        body = self.read_body()
+        if not body:
+            self.send_json({"success": False, "message": "Missing body"})
+            return
+        name = body.get("name", "")
+        schedules = load_schedules()
+        for s in schedules:
+            if s.get("name") == name:
+                s["enabled"] = not s.get("enabled", True)
+                break
+        save_schedules(schedules)
+        self.send_json({"success": True, "message": f"Toggled schedule: {name}"})
+
+    # ── Logs ──
+    def handle_logs(self, search="", lines=200):
+        log_file = os.path.join(SERVER_DIR, "logs", "latest.log")
+        if not os.path.exists(log_file):
+            self.send_json({"lines": [], "total": 0, "search": search})
+            return
+        try:
+            result = subprocess.run(
+                ["tail", f"-{lines}", log_file],
+                capture_output=True, text=True, timeout=10
+            )
+            all_lines = result.stdout.split("\n")
+            if search:
+                filtered = [l for l in all_lines if search.lower() in l.lower()]
+            else:
+                filtered = all_lines
+            self.send_json({"lines": filtered, "total": len(filtered), "search": search})
+        except Exception as e:
+            self.send_json({"error": str(e)})
+
+    # ── Server Info ──
+    def handle_server_info(self):
+        props = read_properties()
+        version = get_server_version()
+        paper_ver = get_paper_version()
+        world_sizes = get_world_sizes()
+        plugins = get_installed_plugins()
+
+        self.send_json({
+            "server_version": version,
+            "paper_version": paper_ver,
+            "ip": props.get("server-ip", "*"),
+            "port": int(props.get("server-port", "25565")),
+            "max_players": int(props.get("max-players", "20")),
+            "online_mode": props.get("online-mode", "true"),
+            "motd": props.get("motd", "A Minecraft Server"),
+            "view_distance": props.get("view-distance", "10"),
+            "world_sizes": world_sizes,
+            "plugins": plugins,
+            "plugin_count": len(plugins),
+        })
 
 
+# ── Main ──
 if __name__ == "__main__":
-    port = 8080
-    srv = HTTPServer(("0.0.0.0", port), PanelHandler)
-    print(f"Panel → http://0.0.0.0:{port}")
-    srv.serve_forever()
+    print(f"🔐 Panel password: {PANEL_PASSWORD}")
+    print(f"🖥️  MCPanel starting on port {PANEL_PORT}...")
+    print(f"📁 Server directory: {SERVER_DIR}")
+
+    # Start schedule runner thread
+    sched_thread = threading.Thread(target=schedule_runner, daemon=True)
+    sched_thread.start()
+    print("⏰ Schedule runner started")
+
+    server = HTTPServer(("0.0.0.0", PANEL_PORT), PanelHandler)
+    print(f"✅ MCPanel running at http://0.0.0.0:{PANEL_PORT}")
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\n🛑 MCPanel shutting down...")
+        schedule_running = False
+        server.server_close()
