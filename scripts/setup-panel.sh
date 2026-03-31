@@ -20,8 +20,12 @@ sudo systemctl start cloudflared
 sudo systemctl status cloudflared --no-pager || true
 echo "✅ Cloudflared started"
 
+# Export environment variables for panel
+export PANEL_PASSWORD="${PANEL_PASSWORD:-admin123}"
+export PANEL_PORT="${PANEL_PORT:-8080}"
+
 # Start panel
-echo "🌐 Starting panel on port 8080..."
+echo "🌐 Starting panel on port ${PANEL_PORT}..."
 cd scripts/panel
 python3 panel-server.py &
 PANEL_PID=$!
@@ -31,7 +35,8 @@ cd ../..
 sleep 3
 
 if kill -0 $PANEL_PID 2>/dev/null; then
-  echo "✅ Panel running on port 8080 (PID: $PANEL_PID)"
+  echo "✅ Panel running on port ${PANEL_PORT} (PID: $PANEL_PID)"
+  echo "✅ Default login: admin / admin123"
 else
   echo "❌ Panel failed to start!"
   exit 1
