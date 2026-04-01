@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""MCPanel v2 - Minecraft Server Management Panel Backend
-Multi-server, multi-user management panel with SQLite database."""
+"""MCPanel v3 - Minecraft Server Management Panel Backend
+Multi-server, multi-user management panel with SQLite database.
+Features: Analytics, Alerts, 2FA, AI Assistant, MOTD Preview, Settings, Chat Bridge, Sessions."""
 
 import json
 import os
@@ -16,6 +17,9 @@ import urllib.request
 import hashlib
 import math
 import secrets
+import hmac
+import base64
+import struct
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 
@@ -96,8 +100,92 @@ def init_db():
             details TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS analytics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            server_id INTEGER,
+            players INTEGER DEFAULT 0,
+            tps REAL DEFAULT 20.0,
+            cpu REAL DEFAULT 0.0,
+            ram_used INTEGER DEFAULT 0,
+            ram_total INTEGER DEFAULT 4096,
+            timestamp TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            server_id INTEGER,
+            alert_type TEXT NOT NULL,
+            threshold REAL DEFAULT 0,
+            enabled INTEGER DEFAULT 1,
+            cooldown_seconds INTEGER DEFAULT 300,
+            last_triggered TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS alert_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            server_id INTEGER,
+            alert_type TEXT,
+            message TEXT,
+            triggered_at TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated_at TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            token TEXT UNIQUE NOT NULL,
+            ip TEXT DEFAULT '',
+            user_agent TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now')),
+            expires_at TEXT DEFAULT (datetime('now', '+24 hours'))
+        );
     """)
     conn.commit()
+
+    # Add TOTP columns to users table (safe ALTER - ignore if exists)
+    for col_sql in [
+        "ALTER TABLE users ADD COLUMN totp_secret TEXT DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN totp_enabled INTEGER DEFAULT 0",
+    ]:
+        try:
+            c.execute(col_sql)
+            conn.commit()
+        except Exception:
+            pass
+
+    # Seed default settings if empty
+    row_settings = c.execute("SELECT COUNT(*) as cnt FROM settings").fetchone()
+    if row_settings["cnt"] == 0:
+        c.executemany(
+            "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+            [
+                ("theme", "dark"),
+                ("panel_name", "MCPanel"),
+                ("alerts_enabled", "true"),
+            ],
+        )
+        conn.commit()
+        print("[DB] Created default settings")
+
+    # Seed default alerts for server 1 if no alerts exist
+    row_alerts = c.execute("SELECT COUNT(*) as cnt FROM alerts").fetchone()
+    if row_alerts["cnt"] == 0:
+        c.executemany(
+            "INSERT OR IGNORE INTO alerts (server_id, alert_type, threshold, enabled, cooldown_seconds) VALUES (?, ?, ?, ?, ?)",
+            [
+                (1, "cpu_high", 90, 1, 300),
+                (1, "ram_high", 90, 1, 300),
+                (1, "tps_low", 15, 1, 300),
+            ],
+        )
+        conn.commit()
+        print("[DB] Created default alerts for server 1")
 
     # Create default admin user if no users exist
     row = c.execute("SELECT COUNT(*) as cnt FROM users").fetchone()
@@ -776,10 +864,12 @@ def modrinth_search(query, offset=0, limit=20):
                 "download_count": h.get("downloads", 0),
                 "author": h.get("author", ""),
                 "project_id": h.get("project_id", ""),
+                "page_url": f"https://modrinth.com/mod/{h.get('slug', '')}",
+                "date_modified": h.get("date_modified", "")[:10] if h.get("date_modified") else "",
             })
-        return {"hits": hits, "total_hits": data.get("total_hits", 0)}
+        return {"hits": hits, "results": hits, "total_hits": data.get("total_hits", 0)}
     except Exception as e:
-        return {"hits": [], "error": str(e)}
+        return {"hits": [], "results": [], "error": str(e)}
 
 
 def modrinth_featured():
@@ -801,10 +891,371 @@ def modrinth_featured():
                 "download_count": h.get("downloads", 0),
                 "author": h.get("author", ""),
                 "project_id": h.get("project_id", ""),
+                "page_url": f"https://modrinth.com/mod/{h.get('slug', '')}",
+                "date_modified": h.get("date_modified", "")[:10] if h.get("date_modified") else "",
             })
-        return {"hits": hits, "total_hits": data.get("total_hits", 0)}
+        return {"hits": hits, "results": hits, "total_hits": data.get("total_hits", 0)}
     except Exception as e:
-        return {"hits": [], "error": str(e)}
+        return {"hits": [], "results": [], "error": str(e)}
+
+
+def modrinth_versions(slug):
+    """Get available versions for a Modrinth project."""
+    try:
+        import urllib.parse as up
+        url = f"https://api.modrinth.com/v2/project/{up.quote(slug)}/version"
+        req = urllib.request.Request(url, headers={"User-Agent": "MCPanel/2.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+        versions = []
+        for v in data[:10]:
+            files = v.get("files", [])
+            primary = files[0] if files else None
+            if primary:
+                versions.append({
+                    "version": v.get("version_number", ""),
+                    "name": v.get("name", ""),
+                    "url": primary.get("url", ""),
+                    "size": primary.get("size", 0),
+                    "downloads": v.get("downloads", 0),
+                })
+        return {"versions": versions}
+    except Exception as e:
+        return {"versions": [], "error": str(e)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TOTP (Pure Python - no pyotp dependency)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def generate_totp_secret():
+    """Generate a new base32-encoded TOTP secret."""
+    return base64.b32encode(secrets.token_bytes(20)).decode().rstrip('=')
+
+def get_totp_code(secret, period=30):
+    """Generate a TOTP code from a base32 secret."""
+    key = base64.b32decode(secret + '=' * ((8 - len(secret)) % 8))
+    t = int(time.time()) // period
+    msg = struct.pack('>Q', t)
+    h = hmac.new(key, msg, hashlib.sha1).digest()
+    offset = h[-1] & 0x0f
+    code = struct.unpack('>I', h[offset:offset+4])[0] & 0x7fffffff
+    return str(code % 1000000).zfill(6)
+
+def verify_totp(secret, code, period=30, window=1):
+    """Verify a TOTP code against a secret with a time window."""
+    for i in range(-window, window + 1):
+        t = int(time.time()) // period + i
+        msg = struct.pack('>Q', t)
+        h = hmac.new(base64.b32decode(secret + '=' * ((8 - len(secret)) % 8)), msg, hashlib.sha1).digest()
+        offset = h[-1] & 0x0f
+        generated = str(struct.unpack('>I', h[offset:offset+4])[0] & 0x7fffffff % 1000000).zfill(6)
+        if generated == code:
+            return True
+    return False
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ANALYTICS COLLECTOR
+# ═══════════════════════════════════════════════════════════════════════════
+
+def analytics_collector():
+    """Background thread that snapshots server stats every 60 seconds."""
+    while schedule_running:
+        try:
+            servers = get_all_servers()
+            conn = get_db()
+            for srv in servers:
+                sid = srv["id"]
+                sdir = srv["path"]
+                sname = srv["screen_name"]
+                running = is_server_running(sname)
+                players = len(get_online_players(sdir)) if running else 0
+                tps = get_tps(sdir, sname) if running else 20.0
+                cpu = get_cpu_usage() if running else 0.0
+                ram_used = get_ram_usage(sdir) if running else 0
+                ram_total = get_ram_total()
+                conn.execute(
+                    "INSERT INTO analytics (server_id, players, tps, cpu, ram_used, ram_total) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (sid, players, tps, cpu, ram_used, ram_total),
+                )
+
+                # Check alerts for this server
+                try:
+                    alerts_rows = conn.execute(
+                        "SELECT * FROM alerts WHERE server_id = ? AND enabled = 1",
+                        (sid,),
+                    ).fetchall()
+                    for alert in alerts_rows:
+                        a = dict(alert)
+                        triggered = False
+                        msg = ""
+                        atype = a["alert_type"]
+                        threshold = a["threshold"]
+                        cooldown = a.get("cooldown_seconds", 300)
+                        last_trig = a.get("last_triggered")
+
+                        if atype == "cpu_high" and cpu > threshold:
+                            triggered = True
+                            msg = f"CPU usage {cpu:.1f}% exceeds threshold {threshold}%"
+                        elif atype == "ram_high" and ram_total > 0 and (ram_used / ram_total * 100) > threshold:
+                            triggered = True
+                            msg = f"RAM usage {ram_used}MB ({ram_used/ram_total*100:.1f}%) exceeds threshold {threshold}%"
+                        elif atype == "tps_low" and running and tps < threshold:
+                            triggered = True
+                            msg = f"TPS {tps:.1f} is below threshold {threshold}"
+
+                        if triggered:
+                            # Check cooldown
+                            should_fire = True
+                            if last_trig:
+                                try:
+                                    last_ts = time.mktime(
+                                        datetime.strptime(last_trig, "%Y-%m-%d %H:%M:%S").timetuple()
+                                    )
+                                    if time.time() - last_ts < cooldown:
+                                        should_fire = False
+                                except (ValueError, TypeError):
+                                    pass
+                            if should_fire:
+                                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                conn.execute(
+                                    "INSERT INTO alert_history (server_id, alert_type, message) VALUES (?, ?, ?)",
+                                    (sid, atype, msg),
+                                )
+                                conn.execute(
+                                    "UPDATE alerts SET last_triggered = ? WHERE id = ?",
+                                    (now_str, a["id"]),
+                                )
+                                conn.commit()
+                                print(f"[ALERT] Server {srv['name']}: {msg}")
+                except Exception as alert_err:
+                    pass
+
+            # Cleanup old analytics (keep 7 days)
+            conn.execute("DELETE FROM analytics WHERE timestamp < datetime('now', '-7 days')")
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            pass
+        time.sleep(60)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AI ASSISTANT (Keyword-based)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def ai_assistant_response(message):
+    """Generate a keyword-based AI assistant response."""
+    msg_lower = message.lower().strip()
+
+    if not msg_lower:
+        return "Hello! I'm the MCPanel AI assistant. Ask me anything about your server!"
+
+    if any(k in msg_lower for k in ["whitelist", "allow player"]):
+        return ("To manage the whitelist, go to your server's console and use:\n"
+                "• `whitelist on` - Enable whitelist\n"
+                "• `whitelist off` - Disable whitelist\n"
+                "• `whitelist add <player>` - Add a player\n"
+                "• `whitelist remove <player>` - Remove a player\n"
+                "• `whitelist list` - Show whitelisted players")
+
+    if any(k in msg_lower for k in ["op", "admin", "operator"]):
+        return ("To manage operators:\n"
+                "• `op <player>` - Grant operator status\n"
+                "• `deop <player>` - Remove operator status\n"
+                "• Operators have full access to server commands.")
+
+    if any(k in msg_lower for k in ["ram", "memory", "allocat"]):
+        return ("Memory allocation is set per server in the server settings:\n"
+                "• RAM Min (Xms): Initial memory allocation\n"
+                "• RAM Max (Xmx): Maximum memory allocation\n"
+                "• Recommended: 2-6GB for small servers, 8-16GB for large servers.\n"
+                "• Monitor usage on the Status page.")
+
+    if any(k in msg_lower for k in ["backup"]):
+        return ("To create a backup:\n"
+                "• Go to your server page → click 'Backup'\n"
+                "• Backups are saved as .tar.gz in the server directory\n"
+                "• Backups exclude logs, jars, and cache for smaller file sizes\n"
+                "• You can also restore by extracting the backup manually.")
+
+    if any(k in msg_lower for k in ["plugin", "mod", "install"]):
+        return ("To manage plugins:\n"
+                "• Go to the Marketplace to browse and install plugins\n"
+                "• Plugins are .jar files placed in the `plugins/` directory\n"
+                "• Use `plugins` command in console to list loaded plugins\n"
+                "• Restart the server after installing new plugins.")
+
+    if any(k in msg_lower for k in ["port", "connect", "join"]):
+        return ("Server port configuration:\n"
+                "• Default port: 25565\n"
+                "• Change in server.properties: `server-port=25565`\n"
+                "• Players connect with: `your-ip:port`\n"
+                "• Make sure the port is open in your firewall.")
+
+    if any(k in msg_lower for k in ["restart", "stop", "start", "boot"]):
+        return ("Server controls:\n"
+                "• Start - Launches the server in a screen session\n"
+                "• Stop - Gracefully stops the server (saves worlds)\n"
+                "• Restart - Stops then starts the server\n"
+                "• Use scheduled tasks for automatic restarts.")
+
+    if any(k in msg_lower for k in ["seed", "world", "generate"]):
+        return ("World/seed information:\n"
+                "• The level-seed is in server.properties\n"
+                "• Set `level-seed=` to a specific seed before first run\n"
+                "• World files are in `world/`, `world_nether/`, `world_the_end/`\n"
+                "• Check world sizes on the Server Info page.")
+
+    if any(k in msg_lower for k in ["error", "crash", "issue", "fix", "troubleshoot"]):
+        return ("Common server errors:\n"
+                "• OutOfMemoryError - Increase RAM allocation\n"
+                "• Port in use - Another process uses the port; kill it or change port\n"
+                "• Plugin errors - Check `logs/latest.log` for stack traces\n"
+                "• Can't bind to IP - Check firewall and server-ip setting\n"
+                "• Use the Console page to view real-time logs.")
+
+    if any(k in msg_lower for k in ["help", "what can", "commands", "feature"]):
+        return ("MCPanel features:\n"
+                "• Server Start/Stop/Restart with console access\n"
+                "• Player management (kick, ban, op, whitelist)\n"
+                "• File browser and editor\n"
+                "• Plugin marketplace (Modrinth integration)\n"
+                "• Scheduled tasks for automation\n"
+                "• Server analytics and alerts\n"
+                "• Backup creation\n"
+                "• Multi-user with role-based access\n"
+                "• 2FA support for accounts\n"
+                "• Ask me about any specific feature!")
+
+    if any(k in msg_lower for k in ["performance", "lag", "slow", "optimize", "tps"]):
+        return ("Performance optimization tips:\n"
+                "• Monitor TPS on the Status page (target: 19.5-20)\n"
+                "• Allocate enough RAM (6GB+ recommended)\n"
+                "• Use Paper server jar for better performance\n"
+                "• Install optimization plugins (ClearLagg, etc.)\n"
+                "• Reduce view-distance and simulation-distance\n"
+                "• Use pre-generated chunks for new worlds")
+
+    if any(k in msg_lower for k in ["2fa", "totp", "authenticator", "security"]):
+        return ("To enable 2FA:\n"
+                "• Go to Settings → Security → Enable 2FA\n"
+                "• Scan the QR code with Google Authenticator or similar app\n"
+                "• Enter the 6-digit code to verify and enable\n"
+                "• You'll need to enter a code on each login after enabling.")
+
+    return ("I'm not sure about that. Try asking about:\n"
+            "• whitelist, op, ram, backup, plugin, port\n"
+            "• restart, seed, error, performance, 2fa, help")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MOTD PREVIEW
+# ═══════════════════════════════════════════════════════════════════════════
+
+MC_COLORS = {
+    '§0': '#000000', '§1': '#0000AA', '§2': '#00AA00', '§3': '#00AAAA',
+    '§4': '#AA0000', '§5': '#AA00AA', '§6': '#FFAA00', '§7': '#AAAAAA',
+    '§8': '#555555', '§9': '#5555FF', '§a': '#55FF55', '§b': '#55FFFF',
+    '§c': '#FF5555', '§d': '#FF55FF', '§e': '#FFFF55', '§f': '#FFFFFF',
+    '§k': '', '§l': 'font-weight:bold', '§m': 'text-decoration:line-through',
+    '§n': 'text-decoration:underline', '§o': 'font-style:italic', '§r': '',
+}
+
+def motd_to_html(motd):
+    """Convert Minecraft § color code MOTD string to HTML."""
+    if not motd:
+        return ""
+    html = ""
+    i = 0
+    current_color = "#FFFFFF"
+    current_styles = []
+    while i < len(motd):
+        if i + 1 < len(motd) and motd[i] == '§':
+            code = motd[i:i+2]
+            if code in MC_COLORS:
+                val = MC_COLORS[code]
+                # Flush current span
+                if html and not html.endswith(">") and (current_color != "#FFFFFF" or current_styles):
+                    pass  # will close later
+                # Handle reset
+                if code == '§r':
+                    if html:
+                        # Close any open spans
+                        while '<span' in html:
+                            html += "</span>"
+                            break
+                    current_color = "#FFFFFF"
+                    current_styles = []
+                elif val.startswith('#'):
+                    # Color change - close previous spans
+                    if '<span' in html:
+                        html += "</span>"
+                    current_color = val
+                    current_styles = []
+                elif val:
+                    # Style code
+                    if val not in current_styles:
+                        current_styles.append(val)
+                else:
+                    pass  # §k (obfuscated) - skip
+                i += 2
+                continue
+        # Regular character
+        # Open span if needed
+        if not html or html.endswith("</span>"):
+            style_parts = []
+            if current_color != "#FFFFFF":
+                style_parts.append(f"color:{current_color}")
+            style_parts.extend(current_styles)
+            if style_parts:
+                html += f'<span style="{";".join(style_parts)}">'
+        html += motd[i]
+        i += 1
+    # Close any remaining spans
+    if '<span' in html and not html.endswith("</span>"):
+        html += "</span>"
+    return html
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CHAT BRIDGE
+# ═══════════════════════════════════════════════════════════════════════════
+
+def get_chat_messages(server_dir, lines=50):
+    """Parse recent chat messages from server logs."""
+    messages = []
+    try:
+        log_file = os.path.join(server_dir, "logs", "latest.log")
+        if not os.path.exists(log_file):
+            return messages
+        result = subprocess.run(
+            ["tail", f"-{lines * 3}", log_file],
+            capture_output=True, text=True, timeout=5,
+        )
+        for line in reversed(result.stdout.split("\n")):
+            if len(messages) >= lines:
+                break
+            # Match lines containing <PlayerName> message
+            m = re.search(r'<([^>]+)>\s*(.*)', line)
+            if m:
+                player = m.group(1).strip()
+                msg = m.group(2).strip()
+                # Extract timestamp from log line
+                ts = ""
+                ts_m = re.match(r'\[(\d{2}:\d{2}:\d{2})\]', line)
+                if ts_m:
+                    ts = ts_m.group(1)
+                messages.insert(0, {
+                    "player": player,
+                    "message": msg,
+                    "timestamp": ts,
+                })
+    except Exception:
+        pass
+    return messages
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -952,6 +1403,74 @@ class PanelHandler(BaseHTTPRequestHandler):
             self.send_json(modrinth_featured())
             return
 
+        if path == "/api/marketplace/versions":
+            user = self.require_auth()
+            if not user:
+                return
+            slug = query.get("slug", [""])[0]
+            self.send_json(modrinth_versions(slug))
+            return
+
+        # ── 2FA setup (auth required) ────────────────────────────────
+        if path == "/api/auth/2fa/setup":
+            user = self.require_auth()
+            if not user:
+                return
+            secret = generate_totp_secret()
+            self.send_json({"secret": secret, "user": user})
+            return
+
+        # ── AI Chat (auth required) ──────────────────────────────────
+        if path == "/api/ai/chat":
+            user = self.require_auth()
+            if not user:
+                return
+            self.send_json({"error": "Use POST for AI chat"})
+            return
+
+        # ── Settings (auth required) ─────────────────────────────────
+        if path == "/api/settings":
+            user = self.require_auth()
+            if not user:
+                return
+            try:
+                conn = get_db()
+                rows = conn.execute("SELECT key, value, updated_at FROM settings ORDER BY key").fetchall()
+                conn.close()
+                settings = {r["key"]: {"value": r["value"], "updated_at": r["updated_at"]} for r in rows}
+                self.send_json({"settings": settings, "user": user})
+            except Exception as e:
+                self.send_json({"error": str(e), "user": user})
+            return
+
+        # ── Sessions (auth required, admin+) ─────────────────────────
+        if path == "/api/auth/sessions":
+            user = self.require_role("admin")
+            if not user:
+                return
+            try:
+                conn = get_db()
+                rows = conn.execute(
+                    "SELECT s.*, u.username FROM sessions s LEFT JOIN users u ON s.user_id = u.id "
+                    "ORDER BY s.created_at DESC LIMIT 100"
+                ).fetchall()
+                conn.close()
+                sessions = []
+                for r in rows:
+                    sessions.append({
+                        "id": r["id"],
+                        "user_id": r["user_id"],
+                        "username": r["username"],
+                        "ip": r["ip"],
+                        "user_agent": r["user_agent"],
+                        "created_at": r["created_at"],
+                        "expires_at": r["expires_at"],
+                    })
+                self.send_json({"sessions": sessions, "user": user})
+            except Exception as e:
+                self.send_json({"error": str(e), "user": user})
+            return
+
         # ── /api/servers/... endpoints ─────────────────────────────────
         server_id, rest = parse_server_id(path)
         if server_id is not None:
@@ -1027,6 +1546,41 @@ class PanelHandler(BaseHTTPRequestHandler):
             self._handle_register(user)
             return
 
+        # 2FA endpoints
+        if path == "/api/auth/2fa/enable":
+            user = self.require_auth()
+            if not user:
+                return
+            self._handle_2fa_enable(user)
+            return
+
+        if path == "/api/auth/2fa/verify":
+            self._handle_2fa_verify()
+            return
+
+        if path == "/api/auth/2fa/disable":
+            user = self.require_auth()
+            if not user:
+                return
+            self._handle_2fa_disable(user)
+            return
+
+        # Sessions delete
+        if path == "/api/auth/sessions/delete":
+            user = self.require_role("admin")
+            if not user:
+                return
+            self._handle_session_delete(user)
+            return
+
+        # AI Chat
+        if path == "/api/ai/chat":
+            user = self.require_auth()
+            if not user:
+                return
+            self._handle_ai_chat(user)
+            return
+
         # ── /api/servers/... POST endpoints ────────────────────────────
         server_id, rest = parse_server_id(path)
         if server_id is not None:
@@ -1090,6 +1644,28 @@ class PanelHandler(BaseHTTPRequestHandler):
 
         user = self.require_auth()
         if not user:
+            return
+
+        # /api/settings (PUT)
+        if path == "/api/settings":
+            body = self.read_body()
+            if not body or "key" not in body or "value" not in body:
+                self.send_json({"error": "Missing key/value"}, 400)
+                return
+            try:
+                with db_lock:
+                    conn = get_db()
+                    conn.execute(
+                        "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now')) "
+                        "ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime('now')",
+                        (body["key"], body["value"], body["value"]),
+                    )
+                    conn.commit()
+                    conn.close()
+                add_audit_log(user["username"], "update_setting", f"{body['key']} = {body['value']}")
+                self.send_json({"success": True, "message": f"Setting '{body['key']}' updated"})
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
             return
 
         # /api/servers/{id}
@@ -1227,7 +1803,7 @@ class PanelHandler(BaseHTTPRequestHandler):
         try:
             conn = get_db()
             row = conn.execute(
-                "SELECT id, username, password, role FROM users WHERE username = ?",
+                "SELECT id, username, password, role, totp_enabled FROM users WHERE username = ?",
                 (username,),
             ).fetchone()
             conn.close()
@@ -1238,6 +1814,27 @@ class PanelHandler(BaseHTTPRequestHandler):
         if not row or not verify_password(password, row["password"]):
             add_audit_log(username, "login_failed", "Invalid credentials")
             self.send_json({"success": False, "error": "Invalid username or password"}, 401)
+            return
+
+        # Check if 2FA is enabled
+        if row["totp_enabled"]:
+            # Generate a short-lived temp token
+            temp_token = secrets.token_hex(32)
+            with token_lock:
+                valid_tokens[temp_token] = {
+                    "user_id": row["id"],
+                    "username": row["username"],
+                    "role": row["role"],
+                    "expires": time.time() + 300,  # 5 minutes
+                    "is_2fa_pending": True,
+                    "real_user_id": row["id"],
+                }
+            add_audit_log(username, "login_2fa_pending", "2FA verification required")
+            self.send_json({
+                "success": True,
+                "requires_2fa": True,
+                "temp_token": temp_token,
+            })
             return
 
         # Generate token
@@ -1263,6 +1860,21 @@ class PanelHandler(BaseHTTPRequestHandler):
         except Exception:
             pass
 
+        # Create session
+        try:
+            client_ip = self.client_address[0] if self.client_address else ""
+            client_ua = self.headers.get("User-Agent", "")[:200]
+            with db_lock:
+                conn = get_db()
+                conn.execute(
+                    "INSERT INTO sessions (user_id, token, ip, user_agent) VALUES (?, ?, ?, ?)",
+                    (row["id"], token, client_ip, client_ua),
+                )
+                conn.commit()
+                conn.close()
+        except Exception:
+            pass
+
         add_audit_log(username, "login", "Successful login")
         self.send_json({
             "success": True,
@@ -1273,6 +1885,215 @@ class PanelHandler(BaseHTTPRequestHandler):
                 "role": row["role"],
             },
         })
+
+    def _handle_2fa_enable(self, user):
+        """POST /api/auth/2fa/enable - Verify code and enable 2FA."""
+        body = self.read_body()
+        if not body:
+            self.send_json({"error": "Missing body"}, 400)
+            return
+        secret = body.get("secret", "")
+        code = str(body.get("code", ""))
+        if not secret or not code:
+            self.send_json({"error": "Secret and code required"}, 400)
+            return
+        if not verify_totp(secret, code):
+            self.send_json({"error": "Invalid code"}, 401)
+            return
+        try:
+            with db_lock:
+                conn = get_db()
+                conn.execute(
+                    "UPDATE users SET totp_secret = ?, totp_enabled = 1 WHERE id = ?",
+                    (secret, user["id"]),
+                )
+                conn.commit()
+                conn.close()
+            add_audit_log(user["username"], "2fa_enable", "2FA enabled")
+            self.send_json({"success": True, "message": "2FA enabled"})
+        except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def _handle_2fa_verify(self):
+        """POST /api/auth/2fa/verify - Verify 2FA code with temp token."""
+        body = self.read_body()
+        if not body:
+            self.send_json({"error": "Missing body"}, 400)
+            return
+        temp_token = body.get("temp_token", "")
+        code = str(body.get("code", ""))
+        if not temp_token or not code:
+            self.send_json({"error": "Temp token and code required"}, 400)
+            return
+        # Validate temp token
+        with token_lock:
+            info = valid_tokens.get(temp_token)
+            if not info:
+                self.send_json({"error": "Invalid or expired temp token"}, 401)
+                return
+            if time.time() > info.get("expires", 0):
+                del valid_tokens[temp_token]
+                self.send_json({"error": "Temp token expired"}, 401)
+                return
+            if not info.get("is_2fa_pending"):
+                self.send_json({"error": "Not a 2FA pending token"}, 400)
+                return
+            user_id = info["real_user_id"]
+            username = info["username"]
+            role = info["role"]
+            # Remove temp token
+            del valid_tokens[temp_token]
+
+        # Get user's TOTP secret
+        try:
+            conn = get_db()
+            row = conn.execute(
+                "SELECT totp_secret FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+            conn.close()
+        except Exception:
+            self.send_json({"error": "Database error"}, 500)
+            return
+
+        if not row or not row["totp_secret"]:
+            self.send_json({"error": "2FA not configured for this user"}, 400)
+            return
+
+        if not verify_totp(row["totp_secret"], code):
+            add_audit_log(username, "2fa_failed", "Invalid 2FA code")
+            self.send_json({"error": "Invalid code"}, 401)
+            return
+
+        # Generate real token
+        token = secrets.token_hex(32)
+        expires = time.time() + TOKEN_EXPIRY_SECONDS
+        with token_lock:
+            valid_tokens[token] = {
+                "user_id": user_id,
+                "username": username,
+                "role": role,
+                "expires": expires,
+            }
+
+        # Update last login
+        try:
+            conn = get_db()
+            conn.execute(
+                "UPDATE users SET last_login = datetime('now') WHERE id = ?",
+                (user_id,),
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+
+        # Create session
+        try:
+            with db_lock:
+                conn = get_db()
+                conn.execute(
+                    "INSERT INTO sessions (user_id, token, ip, user_agent) VALUES (?, ?, ?, ?)",
+                    (user_id, token, "", ""),
+                )
+                conn.commit()
+                conn.close()
+        except Exception:
+            pass
+
+        add_audit_log(username, "login", "Successful login with 2FA")
+        self.send_json({
+            "success": True,
+            "token": token,
+            "user": {
+                "id": user_id,
+                "username": username,
+                "role": role,
+            },
+        })
+
+    def _handle_2fa_disable(self, user):
+        """POST /api/auth/2fa/disable - Disable 2FA."""
+        body = self.read_body()
+        if not body:
+            self.send_json({"error": "Missing body"}, 400)
+            return
+        code = str(body.get("code", ""))
+        if not code:
+            self.send_json({"error": "Code required"}, 400)
+            return
+        # Get current TOTP secret
+        try:
+            conn = get_db()
+            row = conn.execute(
+                "SELECT totp_secret FROM users WHERE id = ?",
+                (user["id"],),
+            ).fetchone()
+            conn.close()
+        except Exception:
+            self.send_json({"error": "Database error"}, 500)
+            return
+
+        if not row or not row["totp_secret"]:
+            self.send_json({"error": "2FA not enabled"}, 400)
+            return
+
+        if not verify_totp(row["totp_secret"], code):
+            add_audit_log(user["username"], "2fa_disable_failed", "Invalid code")
+            self.send_json({"error": "Invalid code"}, 401)
+            return
+
+        try:
+            with db_lock:
+                conn = get_db()
+                conn.execute(
+                    "UPDATE users SET totp_secret = '', totp_enabled = 0 WHERE id = ?",
+                    (user["id"],),
+                )
+                conn.commit()
+                conn.close()
+            add_audit_log(user["username"], "2fa_disable", "2FA disabled")
+            self.send_json({"success": True, "message": "2FA disabled"})
+        except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def _handle_session_delete(self, user):
+        """POST /api/auth/sessions/delete - Kill a session."""
+        body = self.read_body()
+        if not body:
+            self.send_json({"error": "Missing body"}, 400)
+            return
+        session_id = body.get("id")
+        if not session_id:
+            self.send_json({"error": "Session id required"}, 400)
+            return
+        try:
+            with db_lock:
+                conn = get_db()
+                # Get session token to invalidate
+                row = conn.execute(
+                    "SELECT token FROM sessions WHERE id = ?", (session_id,)
+                ).fetchone()
+                if row and row["token"]:
+                    # Remove from valid_tokens
+                    with token_lock:
+                        valid_tokens.pop(row["token"], None)
+                conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+                conn.commit()
+                conn.close()
+            add_audit_log(user["username"], "session_delete", f"Deleted session {session_id}")
+            self.send_json({"success": True, "message": "Session deleted"})
+        except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def _handle_ai_chat(self, user):
+        """POST /api/ai/chat - AI assistant."""
+        body = self.read_body()
+        if not body or "message" not in body:
+            self.send_json({"error": "Missing message"}, 400)
+            return
+        response = ai_assistant_response(body["message"])
+        self.send_json({"response": response, "user": user})
 
     def _handle_register(self, actor):
         """Register a new user. Requires admin+ role."""
@@ -1529,6 +2350,89 @@ class PanelHandler(BaseHTTPRequestHandler):
         elif rest == "/stats":
             # GET /api/servers/{id}/stats
             self.send_json({**get_stats(server_dir), "user": user})
+
+        elif rest == "/analytics":
+            # GET /api/servers/{id}/analytics?hours=24
+            hours = int(query.get("hours", ["24"])[0])
+            try:
+                conn = get_db()
+                rows = conn.execute(
+                    "SELECT * FROM analytics WHERE server_id = ? "
+                    "AND timestamp >= datetime('now', ?) ORDER BY timestamp ASC",
+                    (server_id, f'-{hours} hours'),
+                ).fetchall()
+                conn.close()
+                points = []
+                for r in rows:
+                    points.append({
+                        "id": r["id"],
+                        "server_id": r["server_id"],
+                        "players": r["players"],
+                        "tps": r["tps"],
+                        "cpu": r["cpu"],
+                        "ram_used": r["ram_used"],
+                        "ram_total": r["ram_total"],
+                        "timestamp": r["timestamp"],
+                    })
+                self.send_json({"analytics": points, "count": len(points), "user": user})
+            except Exception as e:
+                self.send_json({"error": str(e), "user": user})
+
+        elif rest == "/alerts":
+            # GET /api/servers/{id}/alerts
+            try:
+                conn = get_db()
+                rows = conn.execute(
+                    "SELECT * FROM alerts WHERE server_id = ? ORDER BY id",
+                    (server_id,),
+                ).fetchall()
+                conn.close()
+                alerts_list = []
+                for r in rows:
+                    alerts_list.append({
+                        "id": r["id"],
+                        "server_id": r["server_id"],
+                        "alert_type": r["alert_type"],
+                        "threshold": r["threshold"],
+                        "enabled": bool(r["enabled"]),
+                        "cooldown_seconds": r["cooldown_seconds"],
+                        "last_triggered": r["last_triggered"],
+                    })
+                self.send_json({"alerts": alerts_list, "user": user})
+            except Exception as e:
+                self.send_json({"error": str(e), "user": user})
+
+        elif rest == "/alert-history":
+            # GET /api/servers/{id}/alert-history
+            try:
+                conn = get_db()
+                rows = conn.execute(
+                    "SELECT * FROM alert_history WHERE server_id = ? ORDER BY id DESC LIMIT 50",
+                    (server_id,),
+                ).fetchall()
+                conn.close()
+                history = []
+                for r in rows:
+                    history.append({
+                        "id": r["id"],
+                        "server_id": r["server_id"],
+                        "alert_type": r["alert_type"],
+                        "message": r["message"],
+                        "triggered_at": r["triggered_at"],
+                    })
+                self.send_json({"history": history, "user": user})
+            except Exception as e:
+                self.send_json({"error": str(e), "user": user})
+
+        elif rest == "/chat":
+            # GET /api/servers/{id}/chat?lines=50
+            lines = int(query.get("lines", ["50"])[0])
+            messages = get_chat_messages(server_dir, lines)
+            self.send_json({"messages": messages, "count": len(messages), "user": user})
+
+        elif rest == "/motd/preview":
+            # GET /api/servers/{id}/motd/preview
+            self.send_json({"error": "Use POST for MOTD preview", "user": user})
 
         else:
             self.send_json({"error": "Not found"}, 404)
@@ -1903,6 +2807,93 @@ class PanelHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"success": False, "message": str(e), "user": user})
 
+        elif rest == "/alerts":
+            # POST /api/servers/{id}/alerts - create alert
+            body = self.read_body()
+            if not body:
+                self.send_json({"success": False, "message": "Missing body", "user": user})
+                return
+            alert_type = body.get("alert_type", "").strip()
+            threshold = float(body.get("threshold", 0))
+            cooldown = int(body.get("cooldown_seconds", 300))
+            if not alert_type:
+                self.send_json({"success": False, "message": "Alert type required", "user": user})
+                return
+            try:
+                with db_lock:
+                    conn = get_db()
+                    conn.execute(
+                        "INSERT INTO alerts (server_id, alert_type, threshold, cooldown_seconds) VALUES (?, ?, ?, ?)",
+                        (server_id, alert_type, threshold, cooldown),
+                    )
+                    conn.commit()
+                    conn.close()
+                add_audit_log(user["username"], "create_alert", f"Server {srv['name']}: {alert_type}")
+                self.send_json({"success": True, "message": f"Alert '{alert_type}' created", "user": user})
+            except Exception as e:
+                self.send_json({"success": False, "message": str(e), "user": user})
+
+        elif rest == "/alerts/delete":
+            # POST /api/servers/{id}/alerts/delete - delete alert
+            body = self.read_body()
+            if not body:
+                self.send_json({"success": False, "message": "Missing body", "user": user})
+                return
+            alert_id = body.get("id")
+            if not alert_id:
+                self.send_json({"success": False, "message": "Alert id required", "user": user})
+                return
+            try:
+                with db_lock:
+                    conn = get_db()
+                    conn.execute(
+                        "DELETE FROM alerts WHERE id = ? AND server_id = ?",
+                        (alert_id, server_id),
+                    )
+                    conn.commit()
+                    conn.close()
+                self.send_json({"success": True, "message": "Alert deleted", "user": user})
+            except Exception as e:
+                self.send_json({"success": False, "message": str(e), "user": user})
+
+        elif rest == "/alerts/toggle":
+            # POST /api/servers/{id}/alerts/toggle - toggle alert
+            body = self.read_body()
+            if not body:
+                self.send_json({"success": False, "message": "Missing body", "user": user})
+                return
+            alert_id = body.get("id")
+            if not alert_id:
+                self.send_json({"success": False, "message": "Alert id required", "user": user})
+                return
+            try:
+                with db_lock:
+                    conn = get_db()
+                    row = conn.execute(
+                        "SELECT enabled FROM alerts WHERE id = ? AND server_id = ?",
+                        (alert_id, server_id),
+                    ).fetchone()
+                    if row:
+                        new_val = 0 if row["enabled"] == 1 else 1
+                        conn.execute(
+                            "UPDATE alerts SET enabled = ? WHERE id = ?",
+                            (new_val, alert_id),
+                        )
+                        conn.commit()
+                    conn.close()
+                self.send_json({"success": True, "message": "Alert toggled", "user": user})
+            except Exception as e:
+                self.send_json({"success": False, "message": str(e), "user": user})
+
+        elif rest == "/motd/preview":
+            # POST /api/servers/{id}/motd/preview
+            body = self.read_body()
+            if not body or "motd" not in body:
+                self.send_json({"error": "Missing motd", "user": user})
+                return
+            html = motd_to_html(body["motd"])
+            self.send_json({"html": html, "user": user})
+
         else:
             self.send_json({"error": "Not found"}, 404)
 
@@ -2207,12 +3198,60 @@ class PanelHandler(BaseHTTPRequestHandler):
             self.send_json({"error": str(e), "user": user})
 
     def _serve_server_info(self, server_dir, user):
-        """Serve server info: version, paper, worlds, java, plugins."""
+        """Serve server info: version, paper, worlds, java, plugins, JAR info, scheduled tasks."""
         props = read_properties(server_dir)
         version = get_server_version(server_dir)
         paper_ver = get_paper_version(server_dir)
         world_sizes = get_world_sizes(server_dir) if os.path.isdir(server_dir) else {}
         plugins = get_installed_plugins(server_dir) if os.path.isdir(server_dir) else []
+
+        # Calculate total plugins size
+        plugins_dir = os.path.join(server_dir, "plugins")
+        total_plugins_size = 0
+        if os.path.isdir(plugins_dir):
+            for f in os.listdir(plugins_dir):
+                if f.endswith(".jar"):
+                    fp = os.path.join(plugins_dir, f)
+                    try:
+                        total_plugins_size += os.path.getsize(fp)
+                    except OSError:
+                        pass
+
+        # Get JAR file info
+        jar_name = props.get("")  # fallback
+        jar_size = 0
+        if os.path.isdir(server_dir):
+            for f in os.listdir(server_dir):
+                if f.endswith(".jar"):
+                    jar_name = f
+                    try:
+                        jar_size = os.path.getsize(f)
+                    except OSError:
+                        pass
+                    break
+        jar_path_full = os.path.join(server_dir, jar_name) if jar_name else ""
+        if jar_path_full and os.path.exists(jar_path_full):
+            try:
+                jar_size = os.path.getsize(jar_path_full)
+            except OSError:
+                pass
+
+        # Count scheduled tasks
+        scheduled_count = 0
+        # We'll pass server_id through a different approach - use srv from caller context
+        # For now, count from the first server or use a generic approach
+        try:
+            conn = get_db()
+            # Find the server_id for this server_dir
+            row = conn.execute("SELECT id FROM servers WHERE path = ?", (server_dir,)).fetchone()
+            if row:
+                scheduled_count = conn.execute(
+                    "SELECT COUNT(*) as cnt FROM schedules WHERE server_id = ? AND enabled = 1",
+                    (row["id"],),
+                ).fetchone()["cnt"]
+            conn.close()
+        except Exception:
+            pass
 
         self.send_json({
             "server_version": version,
@@ -2226,6 +3265,12 @@ class PanelHandler(BaseHTTPRequestHandler):
             "world_sizes": world_sizes,
             "plugins": plugins,
             "plugin_count": len(plugins),
+            "plugins_size": total_plugins_size,
+            "plugins_size_formatted": format_bytes(total_plugins_size),
+            "jar_name": jar_name,
+            "jar_size": jar_size,
+            "jar_size_formatted": format_bytes(jar_size),
+            "scheduled_tasks_count": scheduled_count,
             "java_version": get_java_version(),
             "user": user,
         })
@@ -2852,7 +3897,7 @@ class PanelHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("  MCPanel v2 - Minecraft Server Management Panel")
+    print("  MCPanel v3 - Minecraft Server Management Panel")
     print("=" * 60)
 
     # Initialize database
@@ -2890,6 +3935,11 @@ if __name__ == "__main__":
     sched_thread = threading.Thread(target=schedule_runner, daemon=True)
     sched_thread.start()
     print("[INIT] Schedule runner started")
+
+    # Start analytics collector
+    analytics_thread = threading.Thread(target=analytics_collector, daemon=True)
+    analytics_thread.start()
+    print("[INIT] Analytics collector started")
 
     print(f"[INIT] Panel starting on port {PANEL_PORT}...")
     print(f"[INIT] Default login: admin / admin123")
