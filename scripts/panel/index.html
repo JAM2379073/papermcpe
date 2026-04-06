@@ -7,12 +7,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone@7.23.6/babel.min.js"></script>
+<script crossorigin src="https://unpkg.com/lucide@0.294.0/dist/umd/lucide.min.js"></script>
+<script crossorigin src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{--bg-base:#050507;--bg-surface:#0c0c10;--bg-elevated:#141419;--bg-overlay:#1a1a22;--bg-input:#1e1e28;--border-subtle:rgba(255,255,255,0.06);--border-default:rgba(255,255,255,0.1);--border-strong:rgba(255,255,255,0.15);--text-primary:#f0f0f5;--text-secondary:#8b8b9e;--text-tertiary:#55556a;--accent:#8b5cf6;--accent-hover:#a78bfa;--accent-muted:rgba(139,92,246,0.12);--accent-glow:rgba(139,92,246,0.25);--success:#10b981;--warning:#f59e0b;--danger:#ef4444;--info:#3b82f6;--gradient-1:linear-gradient(135deg,#8b5cf6,#06b6d4);--gradient-2:linear-gradient(135deg,#8b5cf6,#ec4899);--gradient-3:linear-gradient(135deg,#06b6d4,#8b5cf6,#ec4899)}
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -60,7 +59,13 @@ button,input,textarea,select{-webkit-appearance:none;appearance:none;font-family
 </style>
 </head>
 <body>
-<div id="root"></div>
+<div id="root">
+  <div id="preact-load" style="display:flex;align-items:center;justify-content:center;min-height:100dvh;flex-direction:column;gap:16px">
+    <div style="width:32px;height:32px;border:3px solid rgba(139,92,246,0.2);border-top-color:#8b5cf6;border-radius:50%;animation:spin 1s linear infinite"></div>
+    <span style="color:#8b8b9e;font-size:13px;font-family:Inter,system-ui,sans-serif">Loading NovaPanel...</span>
+  </div>
+</div>
+<noscript><div style="display:flex;align-items:center;justify-content:center;min-height:100dvh;color:#8b8b9e;font-size:14px">JavaScript is required to use NovaPanel.</div></noscript>
 <script type="text/babel">
 const {useState,useEffect,useContext,useContext:useCtx,createContext,useRef,useCallback,useMemo,Fragment}=React;
 
@@ -1742,7 +1747,13 @@ function App(){
   </AppProvider>;
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+try {
+  ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  var ld=document.getElementById('preact-load');if(ld)ld.remove();
+} catch(err) {
+  document.getElementById('root').innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100dvh;flex-direction:column;gap:12px;padding:20px"><div style="color:#ef4444;font-size:14px;font-family:monospace;white-space:pre-wrap;text-align:center;max-width:500px">Error: '+err.message+'</div><button onclick="location.reload()" style="padding:8px 16px;background:#8b5cf6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">Retry</button></div>';
+  console.error('NovaPanel render error:',err);
+}
 </script>
 </body>
 </html>
