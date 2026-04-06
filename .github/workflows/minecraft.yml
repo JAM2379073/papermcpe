@@ -1,12 +1,18 @@
-name: Minecraft Paper Server Loop
+name: Minecraft Server Loop (Pterodactyl + NookTheme)
 
 on:
   workflow_dispatch:
+    inputs:
+      deploy_pterodactyl:
+        description: 'Deploy Pterodactyl Panel with NookTheme'
+        required: false
+        default: 'true'
+        type: boolean
 
 jobs:
   minecraft-server:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -15,11 +21,17 @@ jobs:
         run: |
           echo "📦 Installing dependencies..."
           sudo apt-get update
-          sudo apt-get install -y openjdk-21-jdk-headless python3-pip screen jq
+          sudo apt-get install -y openjdk-21-jdk-headless python3-pip screen jq openssl
           sudo update-alternatives --set java /usr/lib/jvm/java-21-openjdk-amd64/bin/java
           sudo update-alternatives --set javac /usr/lib/jvm/java-21-openjdk-amd64/bin/javac
           pip3 install huggingface_hub requests
           java -version
+
+          # Install Docker Compose if not available
+          if ! command -v docker compose &> /dev/null; then
+              sudo apt-get install -y docker-compose-plugin
+          fi
+          docker compose version
           echo "✅ All dependencies installed!"
 
       - name: Cancel Previous Runs
@@ -50,11 +62,16 @@ jobs:
         env:
           PLAYIT_SECRET_KEY: ${{ secrets.PLAYIT_SECRET_KEY }}
 
-      - name: Setup Panel & Cloudflared
+      - name: Setup Pterodactyl Panel + NookTheme
         run: bash scripts/setup-panel.sh
         env:
           PANEL_PASSWORD: ${{ secrets.PANEL_PASSWORD }}
-          PANEL_PORT: "8080"
+          PANEL_ADMIN_EMAIL: ${{ secrets.PANEL_ADMIN_EMAIL || 'admin@pterodactyl.io' }}
+          PANEL_ADMIN_USER: ${{ secrets.PANEL_ADMIN_USER || 'admin' }}
+          APP_URL: "https://panel.projectxglory.qzz.io"
+          DB_ROOT_PASSWORD: "pterodactyl_root_secure_2024"
+          DB_PASSWORD: "pterodactyl_panel_secure_2024"
+          HASHIDS_SALT: "nookure_theme_salt_secure_2024"
 
       - name: Start Minecraft Server
         run: bash scripts/start-server.sh

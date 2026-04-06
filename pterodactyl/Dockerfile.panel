@@ -1,0 +1,89 @@
+FROM php:8.2-fpm-alpine AS panel
+
+# Install system dependencies
+RUN apk add --no-cache \
+    nginx \
+    curl \
+    zip \
+    unzip \
+    git \
+    oniguruma-dev \
+    freetype-dev \
+    libjpeg-turbo-dev \
+    libpng-dev \
+    libzip-dev \
+    icu-dev \
+    linux-headers \
+    $PHPIZE_DEPS \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+        pdo_mysql \
+        mysqli \
+        zip \
+        gd \
+        intl \
+        bcmath \
+        opcache \
+        mbstring \
+        pcntl \
+        tokenizer \
+        xml \
+        soap \
+    && apk del $PHPIZE_DEPS linux-headers
+
+# Install Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# Create app directory
+WORKDIR /var/www/pterodactyl
+
+# Download NookTheme release (includes pre-compiled frontend assets)
+RUN curl -L https://github.com/Nookure/NookTheme/releases/latest/download/panel.tar.gz | tar -xzv --strip-components=1
+
+# Install PHP dependencies (no dev dependencies for production)
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-progress \
+    && composer dump-autoload --optimize
+
+# Set permissions for Laravel storage/bootstrap
+RUN chmod -R 755 storage bootstrap/cache \
+    && mkdir -p storage/logs \
+             storage/framework/sessions \
+             storage/framework/views \
+             storage/framework/cache \
+    && chown -R www-data:www-data /var/www/pterodactyl
+
+# Copy Nginx configuration
+COPY nginx/default.conf /etc/nginx/http.d/default.conf
+
+# Configure PHP-FPM
+RUN mkdir -p /run/php
+RUN echo '[global]' > /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo 'error_log = /proc/self/fd/2' >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo '' >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo '[www]' >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo 'access.log = /proc/self/fd/2' >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo 'clear_env = no' >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo 'listen = 127.0.0.1:9000' >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo 'pm = dynamic' >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo 'pm.max_children = 10' >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo 'pm.start_servers = 2' >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo 'pm.min_spare_servers = 1' >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo 'pm.max_spare_servers = 5' >> /usr/local/etc/php-fpm.d/zz-docker.conf
+
+# Copy entrypoint script
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+# Configure opcache for production
+RUN echo 'opcache.memory_consumption=256' >> /usr/local/etc/php/conf.d/opcache-recommended.ini \
+    && echo 'opcache.interned_strings_buffer=16' >> /usr/local/etc/php/conf.d/opcache-recommended.ini \
+    && echo 'opcache.max_accelerated_files=20000' >> /usr/local/etc/php/conf.d/opcache-recommended.ini \
+    && echo 'opcache.revalidate_freq=0' >> /usr/local/etc/php/conf.d/opcache-recommended.ini \
+    && echo 'opcache.validate_timestamps=0' >> /usr/local/etc/php/conf.d/opcache-recommended.ini \
+    && echo 'opcache.save_comments=1' >> /usr/local/etc/php/conf.d/opcache-recommended.ini \
+    && echo 'opcache.fast_shutdown=1' >> /usr/local/etc/php/conf.d/opcache-recommended.ini \
+    && echo 'opcache.enable_cli=1' >> /usr/local/etc/php/conf.d/opcache-recommended.ini
+
+EXPOSE 80
+
+CMD ["/start.sh"]

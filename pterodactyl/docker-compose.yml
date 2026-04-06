@@ -1,0 +1,66 @@
+services:
+  database:
+    image: mariadb:10.5
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password --innodb-buffer-pool-size=64M --innodb-log-file-size=8M --max-connections=50
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD}"
+      MYSQL_PASSWORD: "${DB_PASSWORD}"
+      MYSQL_DATABASE: panel
+      MYSQL_USER: pterodactyl
+    volumes:
+      - pterodactyl_db:/var/lib/mysql
+    networks:
+      - pterodactyl_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  cache:
+    image: redis:alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 32mb --maxmemory-policy allkeys-lru --save "" --appendonly no
+    networks:
+      - pterodactyl_net
+
+  panel:
+    build:
+      context: .
+      dockerfile: Dockerfile.panel
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      database:
+        condition: service_healthy
+      cache:
+        condition: service_started
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: "${APP_URL:-http://localhost}"
+      APP_TIMEZONE: "${APP_TIMEZONE:-UTC}"
+      DB_HOST: database
+      DB_PORT: "3306"
+      DB_DATABASE: panel
+      DB_USERNAME: pterodactyl
+      DB_PASSWORD: "${DB_PASSWORD}"
+      CACHE_DRIVER: redis
+      SESSION_DRIVER: redis
+      QUEUE_CONNECTION: redis
+      REDIS_HOST: cache
+      HASHIDS_SALT: "${HASHIDS_SALT:-nookure_s3cr3t_salt}"
+    volumes:
+      - pterodactyl_storage:/var/www/pterodactyl/storage
+    networks:
+      - pterodactyl_net
+
+networks:
+  pterodactyl_net:
+    driver: bridge
+
+volumes:
+  pterodactyl_db:
+  pterodactyl_storage:
