@@ -537,7 +537,6 @@ function CommandPalette(){
    LOGIN PAGE
    ═══════════════════════════════════════════ */
 function LoginPage(){
-  const {setUserState,fetchServers}=useApp();
   const [step,setStep]=useState(1);
   const [username,setUsername]=useState('');
   const [password,setPassword]=useState('');
@@ -557,9 +556,9 @@ function LoginPage(){
       if(d.success&&d.token){
         localStorage.setItem('mcpanel_remember',remember?'1':'0');
         setToken(d.token);
-        if(d.user){setUser(d.user);setUserState(d.user)}
+        if(d.user)setUser(d.user);
         if(d.requires_2fa){setStep(2);setLoading(false);return}
-        fetchServers();
+        window.location.reload();
       }else{setError(d.message||'Invalid credentials')}
     }catch(e){setError('Connection failed')}
     setLoading(false);
@@ -571,7 +570,7 @@ function LoginPage(){
     try{
       const r=await fetch(API_BASE+'/api/auth/verify-2fa',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+getToken()},body:JSON.stringify({code})});
       const d=await r.json();
-      if(d.success)fetchServers();else setError(d.message||'Invalid code');
+      if(d.success){window.location.reload()}else{setError(d.message||'Invalid code')}
     }catch(e){setError('Verification failed')}
     setLoading(false);
   }
@@ -1702,7 +1701,7 @@ function WorldMapView(){
    MAIN APP
    ═══════════════════════════════════════════ */
 function AppContent(){
-  const {currentPage,setStatus}=useApp();
+  const {token,currentPage,setStatus}=useApp();
   const views={dash:DashboardView,analytics:AnalyticsView,con:ConsoleView,files:FilesView,props:ConfigView,players:PlayersView,plugins:PluginsView,market:MarketplaceView,sched:SchedulesView,logs:LogsView,info:ServerInfoView,alerts:AlertsView,users:UsersView,audit:AuditView,map:WorldMapView};
   const Page=views[currentPage]||DashboardView;
 
@@ -1723,6 +1722,8 @@ function AppContent(){
     return ()=>window.removeEventListener('server-action',handler);
   },[]);
 
+  if(!token)return <LoginPage/>;
+
   return <div className="main-w">
     <Sidebar/>
     <Header/>
@@ -1736,10 +1737,6 @@ function AppContent(){
 }
 
 function App(){
-  const [authed,setAuthed]=useState(!!getToken());
-
-  if(!authed)return <LoginPage/>;
-
   return <AppProvider>
     <AppContent/>
   </AppProvider>;
