@@ -306,7 +306,7 @@ function Toggle({checked,onChange}){
 
 /* Empty State */
 function EmptyState({icon,message}){
-  return <div style={{textAlign:'center',padding:40,20,color:'var(--text-tertiary)'}}>
+  return <div style={{textAlign:'center',padding:'40px 20px',color:'var(--text-tertiary)'}}>
     <Icon name={icon||'inbox'} size={36} style={{opacity:0.25,marginBottom:10}}/>
     <p style={{fontSize:13}}>{message||'No data'}</p>
   </div>;
@@ -1716,8 +1716,6 @@ function AppContent(){
     const handler=e=>{
       const action=e.detail;
       if(!action)return;
-      const sid=null;
-      import('react').then(({useState})=>{});
       const tk=getToken();if(!tk)return;
       fetch(API_BASE+'/api/'+action,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tk}}).then(r=>r.json()).catch(()=>{});
     };
